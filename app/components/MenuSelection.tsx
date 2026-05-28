@@ -175,6 +175,12 @@ export default function MenuSelection() {
     const meetingType = searchParams.get("type") || null;
     const peopleCount = Number(participantKey);
 
+    if (!supabase) {
+      setSaveError("Supabase 환경변수가 설정되지 않았어요.");
+      setIsSaving(false);
+      return;
+    }
+
     const { error: projectError } = await supabase.from("projects").upsert({
       id: projectId,
       title: projectTitle,

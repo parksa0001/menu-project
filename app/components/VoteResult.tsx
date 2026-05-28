@@ -72,6 +72,13 @@ export default function VoteResult() {
       setIsLoading(true);
       setLoadError("");
 
+      if (!supabase) {
+        setVotes(readLocalVotes(projectId));
+        setLoadError("Supabase 환경변수가 설정되지 않아 이 브라우저의 저장값을 보여주고 있어요.");
+        setIsLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase
         .from("votes")
         .select("participant_id, menus, created_at")
