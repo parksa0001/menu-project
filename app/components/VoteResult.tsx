@@ -431,6 +431,21 @@ export default function VoteResult() {
                   <p className="mt-1 text-xs font-bold text-[#6b7684]">
                     공동 1등 메뉴만 다시 골라주세요
                   </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {decision.menus.map((menu) => (
+                      <div
+                        key={menu}
+                        className="flex items-center gap-2 rounded-[22px] bg-white px-3 py-3"
+                      >
+                        <span className="flex h-10 w-10 items-center justify-center rounded-[16px] bg-[#eaf3ff] text-2xl">
+                          {menuIcons[menu] || "🍽️"}
+                        </span>
+                        <span className="text-sm font-black text-[#191f28]">
+                          {menu}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                   <a
                     href={revotePath}
                     className="mt-3 flex h-12 items-center justify-center rounded-[24px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.01] active:scale-[0.99]"
