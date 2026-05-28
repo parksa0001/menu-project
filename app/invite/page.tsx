@@ -1,16 +1,38 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 // TODO: Kakao JavaScript 앱 키를 발급받아 입력하세요.
 const KAKAO_JAVASCRIPT_KEY = "";
 const KAKAO_SDK_URL = "https://developers.kakao.com/sdk/js/kakao.js";
+const PRODUCTION_ORIGIN = "https://menu-project-three-ruddy.vercel.app";
 const meetingTypeLabels: Record<string, string> = {
   offline: "만나서 먹기",
   delivery: "배달",
   drink: "술자리",
   meal: "식사",
+};
+const participantLabels: Record<string, string> = {
+  "2": "2명",
+  "3": "3명",
+  "4": "4명",
+  "5": "5명",
+  "6": "6명",
+  "7": "7명",
+  "8": "8명",
+  "9": "9명",
+  "10": "10명",
+  "11": "11명",
+  "12": "12명",
+  "13": "13명",
+  "14": "14명",
+  "15": "15명",
+  "16": "16명",
+  "17": "17명",
+  "18": "18명",
+  "19": "19명",
+  "20": "20명",
 };
 
 declare global {
@@ -44,17 +66,24 @@ declare global {
 }
 
 function InviteContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [notice, setNotice] = useState("");
   const meetingName = searchParams.get("name") || "우리 모임";
   const meetingTypeKey = searchParams.get("type") || "offline";
   const meetingTypeLabel = meetingTypeLabels[meetingTypeKey] || meetingTypeKey;
+  const participantKey =
+    searchParams.get("participants") || searchParams.get("otherParticipants") || "4";
+  const participantLabel = participantLabels[participantKey] || `${participantKey}명`;
+  const normalizedSearchParams = new URLSearchParams(searchParams.toString());
 
-  const participantUrl =
-    typeof window === "undefined"
-      ? ""
-      : `${window.location.origin}/join?${searchParams.toString()}`;
+  if (!normalizedSearchParams.get("participants")) {
+    normalizedSearchParams.set("participants", participantKey);
+  }
+
+  normalizedSearchParams.delete("otherParticipants");
+
+  const joinPath = `/join?${normalizedSearchParams.toString()}`;
+  const participantUrl = `${PRODUCTION_ORIGIN}${joinPath}`;
 
   useEffect(() => {
     if (!KAKAO_JAVASCRIPT_KEY || window.Kakao) {
@@ -73,7 +102,7 @@ function InviteContent() {
   }, []);
 
   const moveToMenu = () => {
-    router.push(`/join?${searchParams.toString()}`);
+    window.location.assign(joinPath);
   };
 
   const showCopiedNotice = () => {
@@ -108,7 +137,7 @@ function InviteContent() {
         content: {
           title: "우리 뭐 먹지?",
           description: "친구들과 같이 먹고 싶은 메뉴를 골라보세요",
-          imageUrl: `${window.location.origin}/next.svg`,
+          imageUrl: `${PRODUCTION_ORIGIN}/next.svg`,
           link: {
             mobileWebUrl: participantUrl,
             webUrl: participantUrl,
@@ -157,7 +186,7 @@ function InviteContent() {
             </p>
             <div className="mt-4 flex items-center justify-between rounded-[22px] bg-white px-4 py-3">
               <span className="text-sm font-extrabold text-[#6b7684]">
-                현재 0명이 참여중이에요
+                현재 0 / {participantLabel} 참여중
               </span>
               <span className="text-2xl" aria-hidden="true">
                 🙋

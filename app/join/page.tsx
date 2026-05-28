@@ -1,5 +1,10 @@
+import { Suspense } from "react";
 import MenuSelection from "../components/MenuSelection";
 
 export default function JoinPage() {
-  return <MenuSelection />;
+  return (
+    <Suspense>
+      <MenuSelection />
+    </Suspense>
+  );
 }
