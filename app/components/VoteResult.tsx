@@ -174,6 +174,9 @@ export default function VoteResult() {
   const [rouletteRotation, setRouletteRotation] = useState(0);
   const [rouletteWinner, setRouletteWinner] = useState("");
   const [showConfetti, setShowConfetti] = useState(false);
+  const [tieBreakerMode, setTieBreakerMode] = useState<"roulette" | "revote">(
+    "roulette",
+  );
   const [loadError, setLoadError] = useState("");
   const resultVotes = decision?.type === "revote" ? revoteVotes : votes;
   const popularMenus = buildPopularMenus(resultVotes);
@@ -527,57 +530,112 @@ export default function VoteResult() {
                       </span>
                     ))}
                   </div>
-                  <div className="relative mx-auto mt-5 flex h-64 w-64 items-center justify-center">
-                    <div className="absolute -top-1 z-10 h-0 w-0 border-x-[13px] border-t-[24px] border-x-transparent border-t-[#191f28]" />
-                    <div
-                      className="relative h-60 w-60 rounded-full border-[10px] border-white shadow-[0_14px_34px_rgba(25,31,40,0.12)]"
-                      style={{
-                        background: buildRouletteBackground(
-                          topMenus.map((item) => item.menu),
-                        ),
-                      }}
-                    >
-                      {topMenus.map((item, index) => {
-                        const segmentAngle = 360 / topMenus.length;
-                        const angle = index * segmentAngle + segmentAngle / 2 - 90;
+                  {tieBreakerMode === "roulette" ? (
+                    <>
+                      <div className="relative mx-auto mt-5 flex h-64 w-64 items-center justify-center">
+                        <div className="absolute -top-1 z-10 h-0 w-0 border-x-[13px] border-t-[24px] border-x-transparent border-t-[#191f28]" />
+                        <div
+                          className="relative h-60 w-60 rounded-full border-[10px] border-white shadow-[0_14px_34px_rgba(25,31,40,0.12)]"
+                          style={{
+                            background: buildRouletteBackground(
+                              topMenus.map((item) => item.menu),
+                            ),
+                          }}
+                        >
+                          {topMenus.map((item, index) => {
+                            const segmentAngle = 360 / topMenus.length;
+                            const angle =
+                              index * segmentAngle + segmentAngle / 2 - 90;
 
-                        return (
+                            return (
+                              <div
+                                key={item.menu}
+                                className="absolute left-1/2 top-1/2 origin-left text-[13px] font-black text-[#191f28]"
+                                style={{
+                                  transform: `rotate(${angle}deg) translateX(46px) rotate(90deg)`,
+                                }}
+                              >
+                                <span className="rounded-full bg-white/75 px-2 py-1 shadow-sm">
+                                  {menuIcons[item.menu] || "🍽️"} {item.menu}
+                                </span>
+                              </div>
+                            );
+                          })}
+                          <button
+                            type="button"
+                            onClick={() => saveDecision("random")}
+                            disabled={Boolean(decisionAction)}
+                            className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-base font-black shadow-[0_8px_18px_rgba(25,31,40,0.16)] transition-all hover:scale-105 active:scale-95 disabled:text-[#b0b8c1]"
+                          >
+                            돌리기
+                          </button>
+                        </div>
+                      </div>
+                      <p className="mt-3 text-center text-xs font-bold text-[#8b95a1]">
+                        준비되면 버튼을 눌러 룰렛을 돌려보세요
+                      </p>
+                    </>
+                  ) : (
+                    <div className="mt-5 rounded-[28px] bg-white p-4">
+                      <p className="text-sm font-black text-[#191f28]">
+                        1등 메뉴 다시 투표 🗳
+                      </p>
+                      <p className="mt-1 text-xs font-bold text-[#6b7684]">
+                        아래 후보 중에서 다시 한 번 골라요
+                      </p>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        {topMenus.map((item) => (
                           <div
                             key={item.menu}
-                            className="absolute left-1/2 top-1/2 origin-left text-[13px] font-black text-[#191f28]"
-                            style={{
-                              transform: `rotate(${angle}deg) translateX(46px) rotate(90deg)`,
-                            }}
+                            className="flex items-center gap-2 rounded-[22px] bg-[#f7f8fa] px-3 py-3"
                           >
-                            <span className="rounded-full bg-white/75 px-2 py-1 shadow-sm">
-                              {menuIcons[item.menu] || "🍽️"} {item.menu}
+                            <span className="flex h-10 w-10 items-center justify-center rounded-[16px] bg-[#eaf3ff] text-2xl">
+                              {menuIcons[item.menu] || "🍽️"}
+                            </span>
+                            <span className="text-sm font-black text-[#191f28]">
+                              {item.menu}
                             </span>
                           </div>
-                        );
-                      })}
+                        ))}
+                      </div>
                       <button
                         type="button"
-                        onClick={() => saveDecision("random")}
+                        onClick={() => saveDecision("revote")}
                         disabled={Boolean(decisionAction)}
-                        className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-base font-black shadow-[0_8px_18px_rgba(25,31,40,0.16)] transition-all hover:scale-105 active:scale-95 disabled:text-[#b0b8c1]"
+                        className="mt-3 h-12 w-full rounded-[24px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.02] active:scale-[0.99] disabled:bg-[#d8dde3]"
                       >
-                        돌리기
+                        {decisionAction === "revote"
+                          ? "준비 중..."
+                          : "재투표 시작하기"}
                       </button>
                     </div>
-                  </div>
-                  <p className="mt-3 text-center text-xs font-bold text-[#8b95a1]">
-                    준비되면 버튼을 눌러 룰렛을 돌려보세요
-                  </p>
+                  )}
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => saveDecision("revote")}
+                      onClick={() => setTieBreakerMode("roulette")}
                       disabled={Boolean(decisionAction)}
-                      className="col-span-2 h-12 rounded-[24px] border border-[#dbe5f0] bg-white text-sm font-extrabold text-[#3182f6] transition-all hover:scale-[1.02] active:scale-[0.99] disabled:text-[#b0b8c1]"
+                      className={[
+                        "h-12 rounded-[24px] text-sm font-extrabold transition-all hover:scale-[1.02] active:scale-[0.99] disabled:text-[#b0b8c1]",
+                        tieBreakerMode === "roulette"
+                          ? "bg-[#3182f6] text-white"
+                          : "border border-[#dbe5f0] bg-white text-[#3182f6]",
+                      ].join(" ")}
                     >
-                      {decisionAction === "revote"
-                        ? "준비 중..."
-                        : "🗳 1등 메뉴만 다시 투표"}
+                      🎲 룰렛 돌리기
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTieBreakerMode("revote")}
+                      disabled={Boolean(decisionAction)}
+                      className={[
+                        "h-12 rounded-[24px] text-sm font-extrabold transition-all hover:scale-[1.02] active:scale-[0.99] disabled:text-[#b0b8c1]",
+                        tieBreakerMode === "revote"
+                          ? "bg-[#3182f6] text-white"
+                          : "border border-[#dbe5f0] bg-white text-[#3182f6]",
+                      ].join(" ")}
+                    >
+                      🗳 1등 메뉴만 다시 투표
                     </button>
                   </div>
                 </>
