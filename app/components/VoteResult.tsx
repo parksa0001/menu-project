@@ -83,9 +83,35 @@ const buildPopularMenus = (votes: StoredVote[]) => {
     });
   });
 
-  return [...counts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .map(([menu, count]) => ({ menu, count }));
+  const sortedMenus = [...counts.entries()].sort((a, b) => {
+    if (b[1] !== a[1]) {
+      return b[1] - a[1];
+    }
+
+    return a[0].localeCompare(b[0], "ko");
+  });
+  const countGroups = new Map<number, number>();
+
+  sortedMenus.forEach(([, count]) => {
+    countGroups.set(count, (countGroups.get(count) || 0) + 1);
+  });
+
+  let previousCount: number | null = null;
+  let rank = 0;
+
+  return sortedMenus.map(([menu, count], index) => {
+    if (count !== previousCount) {
+      rank = index + 1;
+      previousCount = count;
+    }
+
+    return {
+      menu,
+      count,
+      rank,
+      isTied: (countGroups.get(count) || 0) > 1,
+    };
+  });
 };
 
 export default function VoteResult() {
@@ -186,23 +212,26 @@ export default function VoteResult() {
                   결과를 불러오는 중이에요
                 </div>
               ) : popularMenus.length > 0 ? (
-                popularMenus.map((item, index) => (
+                popularMenus.map((item) => {
+                  const isWinner = item.rank === 1;
+
+                  return (
                   <div
                     key={item.menu}
                     className={[
                       "flex items-center gap-3 rounded-[24px] px-4 py-3 transition-all",
-                      index === 0
+                      isWinner
                         ? "border border-[#ffd66b] bg-[#fff8e6] shadow-[0_8px_18px_rgba(255,190,40,0.14)]"
                         : "bg-[#f7f8fa]",
                     ].join(" ")}
                   >
                     <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#eaf3ff] text-sm font-extrabold text-[#3182f6]">
-                      {index === 0 ? "🏅" : index + 1}
+                      {isWinner ? "🏅" : item.rank}
                     </span>
                     <span
                       className={[
                         "flex h-11 w-11 items-center justify-center rounded-[18px] text-2xl shadow-[inset_0_-6px_16px_rgba(25,31,40,0.035)]",
-                        index === 0 ? "bg-white" : "bg-[#eef4ff]",
+                        isWinner ? "bg-white" : "bg-[#eef4ff]",
                       ].join(" ")}
                       aria-hidden="true"
                     >
@@ -211,16 +240,17 @@ export default function VoteResult() {
                     <span className="flex-1 text-base font-extrabold">
                       {item.menu}
                     </span>
-                    {index === 0 ? (
+                    {isWinner || item.isTied ? (
                       <span className="rounded-full bg-[#ffcf4a] px-2.5 py-1 text-[11px] font-black text-[#7a4b00]">
-                        1등
+                        {item.isTied ? `공동 ${item.rank}등` : `${item.rank}등`}
                       </span>
                     ) : null}
                     <span className="text-sm font-extrabold text-[#3182f6]">
                       {item.count}표
                     </span>
                   </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="rounded-[22px] bg-[#f7f8fa] px-4 py-3 text-sm font-extrabold text-[#8b95a1]">
                   아직 표시할 투표가 없어요
