@@ -57,6 +57,14 @@ const menuIcons: Record<string, string> = {
   오뎅탕: "🍢",
   닭강정: "🍗",
 };
+const rouletteColors = [
+  "#eaf3ff",
+  "#fff4d8",
+  "#ffecef",
+  "#eafaf1",
+  "#f3f0ff",
+  "#fff1e8",
+];
 
 type StoredVote = {
   participantId: string;
@@ -85,6 +93,19 @@ const pickRandomMenu = (menus: string[]) => {
   crypto.getRandomValues(randomValues);
 
   return menus[randomValues[0] % menus.length];
+};
+
+const buildRouletteBackground = (menus: string[]) => {
+  const segmentSize = 100 / menus.length;
+
+  return `conic-gradient(${menus
+    .map((_, index) => {
+      const start = index * segmentSize;
+      const end = (index + 1) * segmentSize;
+
+      return `${rouletteColors[index % rouletteColors.length]} ${start}% ${end}%`;
+    })
+    .join(", ")})`;
 };
 
 const readLocalVotes = (projectId: string): StoredVote[] => {
@@ -149,6 +170,10 @@ export default function VoteResult() {
   const [decisionAction, setDecisionAction] = useState<
     "random" | "revote" | null
   >(null);
+  const [rouletteMenus, setRouletteMenus] = useState<string[]>([]);
+  const [rouletteRotation, setRouletteRotation] = useState(0);
+  const [rouletteWinner, setRouletteWinner] = useState("");
+  const [showConfetti, setShowConfetti] = useState(false);
   const [loadError, setLoadError] = useState("");
   const resultVotes = decision?.type === "revote" ? revoteVotes : votes;
   const popularMenus = buildPopularMenus(resultVotes);
@@ -168,6 +193,28 @@ export default function VoteResult() {
   revoteSearchParams.set("candidates", decisionMenus.join(","));
 
   const revotePath = `/join?${revoteSearchParams.toString()}`;
+
+  const startRouletteAnimation = (winner: string, menus: string[]) => {
+    const segmentAngle = 360 / menus.length;
+    const winnerIndex = menus.indexOf(winner);
+    const targetAngle = 360 * 7 - (winnerIndex * segmentAngle + segmentAngle / 2);
+
+    setRouletteMenus(menus);
+    setRouletteWinner(winner);
+    setShowConfetti(false);
+    setRouletteRotation(0);
+    window.setTimeout(() => setRouletteRotation(targetAngle), 50);
+    window.setTimeout(() => {
+      setDecision({
+        type: "random",
+        menus: [winner],
+        createdAt: new Date().toISOString(),
+      });
+      setDecisionAction(null);
+      setShowConfetti(true);
+      window.setTimeout(() => setShowConfetti(false), 2600);
+    }, 4300);
+  };
 
   useEffect(() => {
     const loadVotes = async () => {
@@ -287,8 +334,13 @@ export default function VoteResult() {
       return;
     }
 
+    if (type === "random") {
+      startRouletteAnimation(randomMenu, winnerMenus);
+      return;
+    }
+
     setDecision({
-      type,
+      type: "revote",
       menus: payload.slice(1),
       createdAt: new Date().toISOString(),
     });
@@ -336,18 +388,39 @@ export default function VoteResult() {
             </p>
           </div>
 
-          {(hasTie || decision) && (
-            <div className="mt-5 rounded-[30px] border border-[#edf1f5] bg-[#f7fbff] p-4">
+          {(hasTie || decision || decisionAction === "random") && (
+            <div className="relative mt-5 overflow-hidden rounded-[30px] border border-[#edf1f5] bg-[#f7fbff] p-4">
+              {showConfetti && (
+                <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
+                  {Array.from({ length: 18 }).map((_, index) => (
+                    <span
+                      key={index}
+                      className="absolute top-0 h-2 w-2 animate-[confetti_1.8s_ease-out_forwards] rounded-full"
+                      style={{
+                        left: `${8 + ((index * 47) % 84)}%`,
+                        backgroundColor:
+                          rouletteColors[index % rouletteColors.length],
+                        animationDelay: `${(index % 6) * 0.08}s`,
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
               {decision?.type === "random" ? (
                 <>
                   <p className="text-sm font-extrabold text-[#3182f6]">
-                    룰렛 결과가 정해졌어요 🎲
+                    오늘의 메뉴는... 🎉
                   </p>
-                  <div className="mt-3 flex items-center gap-3 rounded-[24px] bg-white px-4 py-3">
+                  <div className="mt-3 flex scale-[1.02] items-center gap-3 rounded-[26px] border border-[#ffd66b] bg-white px-4 py-4 shadow-[0_10px_24px_rgba(255,190,40,0.16)]">
                     <span className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#eaf3ff] text-3xl">
                       {menuIcons[decision.menus[0]] || "🍽️"}
                     </span>
-                    <span className="text-lg font-black">{decision.menus[0]}</span>
+                    <div>
+                      <p className="text-xs font-black text-[#8b95a1]">
+                        룰렛이 골라준 최종 메뉴
+                      </p>
+                      <p className="text-2xl font-black">{decision.menus[0]}</p>
+                    </div>
                   </div>
                 </>
               ) : decision?.type === "revote" ? (
@@ -364,6 +437,60 @@ export default function VoteResult() {
                   >
                     재투표하러 가기
                   </a>
+                </>
+              ) : decisionAction === "random" ? (
+                <>
+                  <p className="text-lg font-black text-[#191f28]">
+                    룰렛 돌아가는 중 🎲
+                  </p>
+                  <p className="mt-1 text-sm font-bold text-[#6b7684]">
+                    잠깐만요, 오늘의 메뉴가 정해지고 있어요
+                  </p>
+                  <div className="relative mx-auto mt-5 flex h-64 w-64 items-center justify-center">
+                    <div className="absolute -top-1 z-10 h-0 w-0 border-x-[13px] border-t-[24px] border-x-transparent border-t-[#191f28]" />
+                    <div
+                      className="relative h-60 w-60 rounded-full border-[10px] border-white shadow-[0_14px_34px_rgba(25,31,40,0.12)] transition-transform duration-[4200ms] ease-out"
+                      style={{
+                        background: buildRouletteBackground(rouletteMenus),
+                        transform: `rotate(${rouletteRotation}deg)`,
+                      }}
+                    >
+                      {rouletteMenus.map((menu, index) => {
+                        const segmentAngle = 360 / rouletteMenus.length;
+                        const angle = index * segmentAngle + segmentAngle / 2;
+
+                        return (
+                          <div
+                            key={menu}
+                            className="absolute left-1/2 top-1/2 origin-left text-[13px] font-black text-[#191f28]"
+                            style={{
+                              transform: `rotate(${angle}deg) translateX(46px) rotate(90deg)`,
+                            }}
+                          >
+                            <span className="rounded-full bg-white/75 px-2 py-1 shadow-sm">
+                              {menuIcons[menu] || "🍽️"} {menu}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      <div className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-2xl font-black shadow-[0_8px_18px_rgba(25,31,40,0.16)]">
+                        GO
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-4 rounded-[24px] bg-white px-4 py-3 text-center">
+                    <p className="text-xs font-black text-[#8b95a1]">
+                      후보 메뉴
+                    </p>
+                    <p className="mt-1 text-sm font-extrabold text-[#3182f6]">
+                      {rouletteMenus.join(" · ")}
+                    </p>
+                    {rouletteWinner ? (
+                      <p className="mt-2 text-base font-black text-[#191f28]">
+                        오늘의 메뉴는...?
+                      </p>
+                    ) : null}
+                  </div>
                 </>
               ) : (
                 <>
@@ -392,7 +519,7 @@ export default function VoteResult() {
                       disabled={Boolean(decisionAction)}
                       className="h-12 rounded-[24px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.02] active:scale-[0.99] disabled:bg-[#d8dde3]"
                     >
-                      {decisionAction === "random" ? "돌리는 중..." : "🎲 랜덤 룰렛"}
+                      🎲 랜덤 룰렛
                     </button>
                     <button
                       type="button"
@@ -470,6 +597,21 @@ export default function VoteResult() {
           {loadError || "이 브라우저에서는 이미 투표한 상태로 저장되어 있어요"}
         </p>
       </section>
+      <style jsx global>{`
+        @keyframes confetti {
+          0% {
+            opacity: 0;
+            transform: translateY(-20px) rotate(0deg) scale(0.8);
+          }
+          15% {
+            opacity: 1;
+          }
+          100% {
+            opacity: 0;
+            transform: translateY(260px) rotate(520deg) scale(1.2);
+          }
+        }
+      `}</style>
     </main>
   );
 }
