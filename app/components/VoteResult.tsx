@@ -78,6 +78,8 @@ type DecisionState = {
 };
 
 const getVotesKey = (projectId: string) => `project_votes_${projectId}`;
+const getVoteKey = (projectId: string) => `project_vote_${projectId}`;
+const getRevoteKey = (projectId: string) => `project_revote_${projectId}`;
 const decisionParticipantId = "__decision__";
 const revoteParticipantPrefix = "__revote__:";
 const randomDecisionToken = "__decision_random__";
@@ -106,6 +108,14 @@ const buildRouletteBackground = (menus: string[]) => {
       return `${rouletteColors[index % rouletteColors.length]} ${start}% ${end}%`;
     })
     .join(", ")})`;
+};
+
+const createParticipantId = () => {
+  if (crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+
+  return `participant_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 };
 
 const readLocalVotes = (projectId: string): StoredVote[] => {
@@ -177,6 +187,8 @@ export default function VoteResult() {
   const [tieBreakerMode, setTieBreakerMode] = useState<"roulette" | "revote">(
     "roulette",
   );
+  const [selectedRevoteMenu, setSelectedRevoteMenu] = useState("");
+  const [isSavingRevote, setIsSavingRevote] = useState(false);
   const [loadError, setLoadError] = useState("");
   const resultVotes = decision?.type === "revote" ? revoteVotes : votes;
   const popularMenus = buildPopularMenus(resultVotes);
@@ -188,14 +200,9 @@ export default function VoteResult() {
   const isRevoteFinished =
     !isLoading && decision?.type === "revote" && revoteVotes.length >= participantCount;
   const hasTie = !decision && isFinished && topMenus.length > 1;
-  const decisionMenus = decision?.menus || topMenus.map((item) => item.menu);
-  const revoteSearchParams = new URLSearchParams(searchParams.toString());
-
-  revoteSearchParams.set("projectId", projectId);
-  revoteSearchParams.set("revote", "1");
-  revoteSearchParams.set("candidates", decisionMenus.join(","));
-
-  const revotePath = `/join?${revoteSearchParams.toString()}`;
+  const hasRevoted =
+    typeof window !== "undefined" &&
+    Boolean(localStorage.getItem(getRevoteKey(projectId)));
 
   const startRouletteAnimation = (winner: string, menus: string[]) => {
     const segmentAngle = 360 / menus.length;
@@ -350,6 +357,91 @@ export default function VoteResult() {
     setDecisionAction(null);
   };
 
+  const submitInlineRevote = async () => {
+    if (!supabase || !selectedRevoteMenu || isSavingRevote || hasRevoted) {
+      return;
+    }
+
+    setIsSavingRevote(true);
+    setLoadError("");
+
+    const candidates = topMenus.map((item) => item.menu);
+    const existingParticipantId =
+      localStorage.getItem(getVoteKey(projectId)) ||
+      localStorage.getItem(getRevoteKey(projectId));
+    const participantId = existingParticipantId || createParticipantId();
+
+    if (!decision) {
+      const { data: existingDecision } = await supabase
+        .from("votes")
+        .select("menus, created_at")
+        .eq("project_id", projectId)
+        .eq("participant_id", decisionParticipantId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingDecision) {
+        if (existingDecision.menus[0] !== revoteDecisionToken) {
+          setLoadError("이미 다른 결정 방식이 시작됐어요.");
+          setIsSavingRevote(false);
+          return;
+        }
+
+        setDecision({
+          type: "revote",
+          menus: existingDecision.menus.slice(1),
+          createdAt: existingDecision.created_at,
+        });
+      } else {
+        const { error } = await supabase.from("votes").insert({
+          project_id: projectId,
+          participant_id: decisionParticipantId,
+          menus: [revoteDecisionToken, ...candidates],
+        });
+
+        if (error) {
+          setLoadError("재투표 시작에 실패했어요. 다시 시도해주세요.");
+          setIsSavingRevote(false);
+          return;
+        }
+
+        setDecision({
+          type: "revote",
+          menus: candidates,
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    const savedParticipantId = `${revoteParticipantPrefix}${participantId}`;
+    const { error: voteError } = await supabase.from("votes").insert({
+      project_id: projectId,
+      participant_id: savedParticipantId,
+      menus: [selectedRevoteMenu],
+    });
+
+    if (voteError) {
+      setLoadError("재투표 저장에 실패했어요. 다시 시도해주세요.");
+      setIsSavingRevote(false);
+      return;
+    }
+
+    const nextVote = {
+      participantId,
+      menus: [selectedRevoteMenu],
+      votedAt: new Date().toISOString(),
+    };
+
+    localStorage.setItem(getRevoteKey(projectId), participantId);
+    setRevoteVotes((current) => [
+      ...current.filter((vote) => vote.participantId !== participantId),
+      nextVote,
+    ]);
+    setSelectedRevoteMenu("");
+    setIsSavingRevote(false);
+  };
+
   return (
     <main className="min-h-screen bg-[#f7f8fa] px-5 pb-8 pt-12 text-[#191f28]">
       <section className="mx-auto flex w-full max-w-md flex-col">
@@ -436,9 +528,17 @@ export default function VoteResult() {
                   </p>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     {decision.menus.map((menu) => (
-                      <div
+                      <button
+                        type="button"
                         key={menu}
-                        className="flex items-center gap-2 rounded-[22px] bg-white px-3 py-3"
+                        onClick={() => setSelectedRevoteMenu(menu)}
+                        disabled={hasRevoted || isSavingRevote}
+                        className={[
+                          "flex items-center gap-2 rounded-[22px] px-3 py-3 text-left transition-all disabled:opacity-70",
+                          selectedRevoteMenu === menu
+                            ? "border border-[#3182f6] bg-[#eaf3ff]"
+                            : "bg-white",
+                        ].join(" ")}
                       >
                         <span className="flex h-10 w-10 items-center justify-center rounded-[16px] bg-[#eaf3ff] text-2xl">
                           {menuIcons[menu] || "🍽️"}
@@ -446,15 +546,21 @@ export default function VoteResult() {
                         <span className="text-sm font-black text-[#191f28]">
                           {menu}
                         </span>
-                      </div>
+                      </button>
                     ))}
                   </div>
-                  <a
-                    href={revotePath}
-                    className="mt-3 flex h-12 items-center justify-center rounded-[24px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.01] active:scale-[0.99]"
+                  <button
+                    type="button"
+                    onClick={submitInlineRevote}
+                    disabled={!selectedRevoteMenu || hasRevoted || isSavingRevote}
+                    className="mt-3 flex h-12 w-full items-center justify-center rounded-[24px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.01] active:scale-[0.99] disabled:bg-[#d8dde3]"
                   >
-                    재투표하러 가기
-                  </a>
+                    {hasRevoted
+                      ? "이미 재투표했어요"
+                      : isSavingRevote
+                        ? "저장 중..."
+                        : "재투표 완료"}
+                  </button>
                 </>
               ) : decisionAction === "random" ? (
                 <>
@@ -585,9 +691,17 @@ export default function VoteResult() {
                       </p>
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         {topMenus.map((item) => (
-                          <div
+                          <button
+                            type="button"
                             key={item.menu}
-                            className="flex items-center gap-2 rounded-[22px] bg-[#f7f8fa] px-3 py-3"
+                            onClick={() => setSelectedRevoteMenu(item.menu)}
+                            disabled={isSavingRevote}
+                            className={[
+                              "flex items-center gap-2 rounded-[22px] px-3 py-3 text-left transition-all disabled:opacity-70",
+                              selectedRevoteMenu === item.menu
+                                ? "border border-[#3182f6] bg-[#eaf3ff]"
+                                : "bg-[#f7f8fa]",
+                            ].join(" ")}
                           >
                             <span className="flex h-10 w-10 items-center justify-center rounded-[16px] bg-[#eaf3ff] text-2xl">
                               {menuIcons[item.menu] || "🍽️"}
@@ -595,18 +709,16 @@ export default function VoteResult() {
                             <span className="text-sm font-black text-[#191f28]">
                               {item.menu}
                             </span>
-                          </div>
+                          </button>
                         ))}
                       </div>
                       <button
                         type="button"
-                        onClick={() => saveDecision("revote")}
-                        disabled={Boolean(decisionAction)}
+                        onClick={submitInlineRevote}
+                        disabled={!selectedRevoteMenu || isSavingRevote}
                         className="mt-3 h-12 w-full rounded-[24px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.02] active:scale-[0.99] disabled:bg-[#d8dde3]"
                       >
-                        {decisionAction === "revote"
-                          ? "준비 중..."
-                          : "재투표 시작하기"}
+                        {isSavingRevote ? "저장 중..." : "재투표 완료"}
                       </button>
                     </div>
                   )}
