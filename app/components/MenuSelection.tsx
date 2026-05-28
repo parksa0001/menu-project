@@ -76,7 +76,9 @@ const createParticipantId = () => {
 };
 
 const getVoteKey = (projectId: string) => `project_vote_${projectId}`;
+const getRevoteKey = (projectId: string) => `project_revote_${projectId}`;
 const getVotesKey = (projectId: string) => `project_votes_${projectId}`;
+const revoteParticipantPrefix = "__revote__:";
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -115,6 +117,18 @@ export default function MenuSelection() {
   const [showLimitHint, setShowLimitHint] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const revoteCandidates = (searchParams.get("candidates") || "")
+    .split(",")
+    .map((menu) => menu.trim())
+    .filter(Boolean);
+  const isRevote =
+    searchParams.get("revote") === "1" && revoteCandidates.length > 0;
+  const voteKey = isRevote ? getRevoteKey(projectId) : getVoteKey(projectId);
+  const activeMinSelections = isRevote ? 1 : minSelections;
+  const activeMaxSelections = isRevote ? 1 : maxSelections;
+  const availableMenus = isRevote
+    ? menus.filter((menu) => revoteCandidates.includes(menu.name))
+    : menus;
   const [votes, setVotes] = useState<StoredVote[]>(() => {
     if (typeof window === "undefined") {
       return [];
@@ -127,7 +141,7 @@ export default function MenuSelection() {
       return false;
     }
 
-    return Boolean(localStorage.getItem(getVoteKey(projectId)));
+    return Boolean(localStorage.getItem(voteKey));
   });
   const participantKey =
     searchParams.get("participants") || searchParams.get("otherParticipants") || "4";
@@ -146,7 +160,7 @@ export default function MenuSelection() {
   }, [hasVoted, resultPath, router]);
 
   const toggleMenu = (menu: string) => {
-    if (!selectedMenus.includes(menu) && selectedMenus.length >= maxSelections) {
+    if (!selectedMenus.includes(menu) && selectedMenus.length >= activeMaxSelections) {
       setShowLimitHint(true);
       window.setTimeout(() => setShowLimitHint(false), 900);
       return;
@@ -162,15 +176,20 @@ export default function MenuSelection() {
   };
 
   const submitVote = async () => {
-    if (selectedMenus.length < minSelections || isSaving) {
+    if (selectedMenus.length < activeMinSelections || isSaving) {
       return;
     }
 
     setIsSaving(true);
     setSaveError("");
 
-    const existingParticipantId = localStorage.getItem(getVoteKey(projectId));
+    const existingParticipantId =
+      localStorage.getItem(getVoteKey(projectId)) ||
+      localStorage.getItem(getRevoteKey(projectId));
     const participantId = existingParticipantId || createParticipantId();
+    const savedParticipantId = isRevote
+      ? `${revoteParticipantPrefix}${participantId}`
+      : participantId;
     const projectTitle = searchParams.get("name") || null;
     const meetingType = searchParams.get("type") || null;
     const peopleCount = Number(participantKey);
@@ -196,7 +215,7 @@ export default function MenuSelection() {
 
     const { error } = await supabase.from("votes").insert({
       project_id: projectId,
-      participant_id: participantId,
+      participant_id: savedParticipantId,
       menus: selectedMenus,
     });
 
@@ -217,7 +236,7 @@ export default function MenuSelection() {
       nextVote,
     ];
 
-    localStorage.setItem(getVoteKey(projectId), participantId);
+    localStorage.setItem(voteKey, participantId);
     localStorage.setItem(getVotesKey(projectId), JSON.stringify(nextVotes));
     setVotes(nextVotes);
     router.push(resultPath);
@@ -282,15 +301,15 @@ export default function MenuSelection() {
       <section className="mx-auto flex w-full max-w-md flex-col">
         <header className="mb-5">
           <div className="mb-2 inline-flex rounded-full bg-white/80 px-3 py-1 text-[11px] font-bold text-[#4e5968]">
-            오늘의 메뉴 선택
+            {isRevote ? "공동 1등 재투표" : "오늘의 메뉴 선택"}
           </div>
           <h1 className="whitespace-nowrap text-[25px] font-extrabold leading-tight tracking-normal min-[390px]:text-[27px]">
-            먹고 싶은 메뉴를 골라주세요
+            {isRevote ? "1등 후보 중 하나를 골라주세요" : "먹고 싶은 메뉴를 골라주세요"}
           </h1>
           <div className="mt-3 flex flex-col items-start gap-1.5">
             <p className="inline-flex rounded-full bg-white px-3 py-1.5 text-sm font-extrabold text-[#3182f6] shadow-[0_4px_12px_rgba(49,130,246,0.08)]">
-              {selectedMenus.length}개 선택됨 (최소 {minSelections}개 / 최대{" "}
-              {maxSelections}개)
+              {selectedMenus.length}개 선택됨 (최소 {activeMinSelections}개 / 최대{" "}
+              {activeMaxSelections}개)
             </p>
             <p className="inline-flex rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-[#6b7684]">
               현재 {votes.length} / {participantLabel} 참여중
@@ -303,13 +322,13 @@ export default function MenuSelection() {
                   : "-translate-y-1 opacity-0",
               ].join(" ")}
             >
-              {saveError || `최대 ${maxSelections}개까지만 고를 수 있어요`}
+              {saveError || `최대 ${activeMaxSelections}개까지만 고를 수 있어요`}
             </p>
           </div>
         </header>
 
         <div className="grid grid-cols-5 gap-x-2.5 gap-y-3.5">
-          {menus.map((menu) => {
+          {availableMenus.map((menu) => {
             const isSelected = selectedMenus.includes(menu.name);
 
             return (
@@ -373,18 +392,20 @@ export default function MenuSelection() {
           <button
             type="button"
             onClick={submitVote}
-            disabled={selectedMenus.length < minSelections || isSaving}
+            disabled={selectedMenus.length < activeMinSelections || isSaving}
             style={{
               backgroundColor:
-                selectedMenus.length >= minSelections ? selectedColor : undefined,
+                selectedMenus.length >= activeMinSelections ? selectedColor : undefined,
             }}
             className="h-14 w-full rounded-[28px] text-base font-extrabold text-white shadow-[0_6px_14px_rgba(49,130,246,0.18)] transition-all duration-200 ease-out hover:-translate-y-0.5 hover:scale-[1.01] active:scale-[0.99] disabled:translate-y-0 disabled:scale-100 disabled:bg-[#d8dde3] disabled:text-white disabled:shadow-none"
           >
             {isSaving
               ? "저장 중..."
-              : selectedMenus.length < minSelections
-              ? `${minSelections - selectedMenus.length}개 더 골라주세요`
-              : "다음"}
+              : selectedMenus.length < activeMinSelections
+                ? `${activeMinSelections - selectedMenus.length}개 더 골라주세요`
+                : isRevote
+                  ? "재투표 완료"
+                  : "다음"}
           </button>
         </div>
       </div>
