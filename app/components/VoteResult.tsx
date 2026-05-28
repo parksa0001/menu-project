@@ -25,6 +25,38 @@ const participantLabels: Record<string, string> = {
   "19": "19명",
   "20": "20명",
 };
+const menuIcons: Record<string, string> = {
+  치킨: "🍗",
+  피자: "🍕",
+  떡볶이: "🌶️",
+  마라탕: "🔥",
+  삼겹살: "🥩",
+  족발보쌈: "🍖",
+  중국집: "🥡",
+  햄버거: "🍔",
+  초밥: "🍣",
+  돈까스: "🍛",
+  파스타: "🍝",
+  김치찌개: "🥘",
+  소고기: "🥩",
+  국밥: "🍚",
+  회: "🐟",
+  곱창: "🔥",
+  닭갈비: "🍳",
+  샤브샤브: "🥘",
+  감자탕: "🍖",
+  라멘: "🍜",
+  양꼬치: "🐑",
+  전골: "🍲",
+  닭발: "🌶️",
+  꼬치: "🍢",
+  육회: "🥩",
+  타코야끼: "🐙",
+  냉면: "🥣",
+  해물탕: "🦐",
+  오뎅탕: "🍢",
+  닭강정: "🍗",
+};
 
 type StoredVote = {
   participantId: string;
@@ -62,10 +94,12 @@ export default function VoteResult() {
   const participantKey =
     searchParams.get("participants") || searchParams.get("otherParticipants") || "4";
   const participantLabel = participantLabels[participantKey] || `${participantKey}명`;
+  const participantCount = Number(participantKey) || 4;
   const [votes, setVotes] = useState<StoredVote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const popularMenus = buildPopularMenus(votes);
+  const isFinished = !isLoading && votes.length >= participantCount;
 
   useEffect(() => {
     const loadVotes = async () => {
@@ -109,20 +143,34 @@ export default function VoteResult() {
     <main className="min-h-screen bg-[#f7f8fa] px-5 pb-8 pt-12 text-[#191f28]">
       <section className="mx-auto flex w-full max-w-md flex-col">
         <header className="mb-6 text-center">
-          <div className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-[36px] bg-[#eaf3ff] text-5xl">
-            ✅
+          <div
+            className={[
+              "mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-[36px] text-5xl shadow-[0_8px_20px_rgba(49,130,246,0.08)]",
+              isFinished ? "bg-[#fff4d8]" : "bg-[#eaf3ff]",
+            ].join(" ")}
+          >
+            {isFinished ? "🏆" : "✅"}
           </div>
           <h1 className="text-[28px] font-extrabold leading-tight tracking-normal">
-            메뉴 선택 완료!
+            {isFinished ? "투표 완료!" : "메뉴 선택 완료!"}
           </h1>
           <p className="mt-3 text-sm font-bold text-[#6b7684]">
-            친구들의 선택이 모이면 결과를 확인할 수 있어요
+            {isFinished
+              ? "모두의 선택이 모였어요. 오늘의 메뉴를 확인해보세요"
+              : "친구들의 선택이 모이면 결과를 확인할 수 있어요"}
           </p>
         </header>
 
         <div className="rounded-[34px] border border-[#edf1f5] bg-white p-5 shadow-[0_4px_14px_rgba(25,31,40,0.035)]">
-          <div className="rounded-[28px] bg-[#f7f8fa] px-4 py-4">
-            <p className="text-xs font-extrabold text-[#8b95a1]">현재 참여</p>
+          <div
+            className={[
+              "rounded-[28px] px-4 py-4",
+              isFinished ? "bg-[#fff8e6]" : "bg-[#f7f8fa]",
+            ].join(" ")}
+          >
+            <p className="text-xs font-extrabold text-[#8b95a1]">
+              {isFinished ? "투표가 모두 끝났어요" : "현재 참여"}
+            </p>
             <p className="mt-1 text-2xl font-extrabold text-[#3182f6]">
               {isLoading ? "확인 중..." : `${votes.length} / ${participantLabel}`}
             </p>
@@ -130,7 +178,7 @@ export default function VoteResult() {
 
           <div className="mt-5">
             <p className="mb-3 text-sm font-extrabold text-[#4e5968]">
-              현재 인기 메뉴 🔥
+              {isFinished ? "최종 인기 메뉴 🏁" : "현재 인기 메뉴 🔥"}
             </p>
             <div className="space-y-2">
               {isLoading ? (
@@ -141,14 +189,33 @@ export default function VoteResult() {
                 popularMenus.map((item, index) => (
                   <div
                     key={item.menu}
-                    className="flex items-center gap-3 rounded-[22px] bg-[#f7f8fa] px-4 py-3"
+                    className={[
+                      "flex items-center gap-3 rounded-[24px] px-4 py-3 transition-all",
+                      index === 0
+                        ? "border border-[#ffd66b] bg-[#fff8e6] shadow-[0_8px_18px_rgba(255,190,40,0.14)]"
+                        : "bg-[#f7f8fa]",
+                    ].join(" ")}
                   >
                     <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#eaf3ff] text-sm font-extrabold text-[#3182f6]">
-                      {index + 1}
+                      {index === 0 ? "🏅" : index + 1}
+                    </span>
+                    <span
+                      className={[
+                        "flex h-11 w-11 items-center justify-center rounded-[18px] text-2xl shadow-[inset_0_-6px_16px_rgba(25,31,40,0.035)]",
+                        index === 0 ? "bg-white" : "bg-[#eef4ff]",
+                      ].join(" ")}
+                      aria-hidden="true"
+                    >
+                      {menuIcons[item.menu] || "🍽️"}
                     </span>
                     <span className="flex-1 text-base font-extrabold">
                       {item.menu}
                     </span>
+                    {index === 0 ? (
+                      <span className="rounded-full bg-[#ffcf4a] px-2.5 py-1 text-[11px] font-black text-[#7a4b00]">
+                        1등
+                      </span>
+                    ) : null}
                     <span className="text-sm font-extrabold text-[#3182f6]">
                       {item.count}표
                     </span>
