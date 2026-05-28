@@ -24,7 +24,8 @@ const otherParticipantOptions = Array.from({ length: 12 }, (_, index) => {
 export default function Home() {
   const [meetingName, setMeetingName] = useState("");
   const [projectId] = useState(() => crypto.randomUUID());
-  const [showParticipantHint, setShowParticipantHint] = useState(false);
+  const [missingEatType, setMissingEatType] = useState(false);
+  const [missingParticipants, setMissingParticipants] = useState(false);
   const [selectedPresetParticipants, setSelectedPresetParticipants] =
     useState<string | null>(null);
   const [selectedOtherParticipants, setSelectedOtherParticipants] = useState("");
@@ -42,7 +43,14 @@ export default function Home() {
     const selectedPeopleCount =
       peopleCount ?? (otherPeopleCount || radioPeopleCount || null);
 
-    setShowParticipantHint(false);
+    if (eatType) {
+      setMissingEatType(false);
+    }
+
+    if (selectedPeopleCount) {
+      setMissingParticipants(false);
+    }
+
     console.log(
       JSON.stringify({
         eatType: eatType || null,
@@ -93,8 +101,12 @@ export default function Home() {
 
     if (!eatType || !peopleCount) {
       event.preventDefault();
-      setShowParticipantHint(true);
-      window.setTimeout(() => setShowParticipantHint(false), 1600);
+      setMissingEatType(!eatType);
+      setMissingParticipants(!peopleCount);
+      window.setTimeout(() => {
+        setMissingEatType(false);
+        setMissingParticipants(false);
+      }, 1800);
       return;
     }
   };
@@ -164,6 +176,16 @@ export default function Home() {
                 );
               })}
             </div>
+            <p
+              className={[
+                "mt-2 text-xs font-extrabold text-[#ff5c2b] transition-all duration-200",
+                missingEatType
+                  ? "translate-y-0 opacity-100"
+                  : "-translate-y-1 opacity-0",
+              ].join(" ")}
+            >
+              먼저 어떻게 먹을지 선택해주세요
+            </p>
           </div>
 
           <div>
@@ -230,7 +252,7 @@ export default function Home() {
             <p
               className={[
                 "mt-2 text-xs font-extrabold text-[#ff5c2b] transition-all duration-200",
-                showParticipantHint
+                missingParticipants
                   ? "translate-y-0 opacity-100"
                   : "-translate-y-1 opacity-0",
               ].join(" ")}
