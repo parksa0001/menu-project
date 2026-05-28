@@ -457,7 +457,7 @@ export default function VoteResult() {
                     >
                       {rouletteMenus.map((menu, index) => {
                         const segmentAngle = 360 / rouletteMenus.length;
-                        const angle = index * segmentAngle + segmentAngle / 2;
+                        const angle = index * segmentAngle + segmentAngle / 2 - 90;
 
                         return (
                           <div
@@ -524,7 +524,7 @@ export default function VoteResult() {
                     >
                       {topMenus.map((item, index) => {
                         const segmentAngle = 360 / topMenus.length;
-                        const angle = index * segmentAngle + segmentAngle / 2;
+                        const angle = index * segmentAngle + segmentAngle / 2 - 90;
 
                         return (
                           <div
