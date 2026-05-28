@@ -199,6 +199,12 @@ export default function VoteResult() {
     decision?.type !== "revote";
   const isRevoteFinished =
     !isLoading && decision?.type === "revote" && revoteVotes.length >= participantCount;
+  const finalMenus =
+    decision?.type === "random"
+      ? decision.menus
+      : isRevoteFinished
+        ? topMenus.map((item) => item.menu)
+        : [];
   const hasTie = !decision && isFinished && topMenus.length > 1;
   const hasRevoted =
     typeof window !== "undefined" &&
@@ -501,22 +507,36 @@ export default function VoteResult() {
                   ))}
                 </div>
               )}
-              {decision?.type === "random" ? (
+              {finalMenus.length > 0 ? (
                 <>
                   <p className="text-sm font-extrabold text-[#3182f6]">
                     오늘의 메뉴는... 🎉
                   </p>
-                  <div className="mt-3 flex scale-[1.02] items-center gap-3 rounded-[26px] border border-[#ffd66b] bg-white px-4 py-4 shadow-[0_10px_24px_rgba(255,190,40,0.16)]">
-                    <span className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#eaf3ff] text-3xl">
-                      {menuIcons[decision.menus[0]] || "🍽️"}
-                    </span>
-                    <div>
-                      <p className="text-xs font-black text-[#8b95a1]">
-                        룰렛이 골라준 최종 메뉴
-                      </p>
-                      <p className="text-2xl font-black">{decision.menus[0]}</p>
-                    </div>
+                  <div className="mt-3 space-y-2">
+                    {finalMenus.map((menu) => (
+                      <div
+                        key={menu}
+                        className="flex scale-[1.02] items-center gap-3 rounded-[26px] border border-[#ffd66b] bg-white px-4 py-4 shadow-[0_10px_24px_rgba(255,190,40,0.16)]"
+                      >
+                        <span className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#eaf3ff] text-3xl">
+                          {menuIcons[menu] || "🍽️"}
+                        </span>
+                        <div>
+                          <p className="text-xs font-black text-[#8b95a1]">
+                            {decision?.type === "random"
+                              ? "룰렛이 골라준 최종 메뉴"
+                              : "재투표로 정해진 최종 메뉴"}
+                          </p>
+                          <p className="text-2xl font-black">{menu}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
+                  {finalMenus.length > 1 ? (
+                    <p className="mt-3 rounded-[22px] bg-white px-4 py-3 text-center text-sm font-extrabold text-[#6b7684]">
+                      재투표도 공동 1등이에요. 친구들과 한 번 더 정해봐요
+                    </p>
+                  ) : null}
                 </>
               ) : decision?.type === "revote" ? (
                 <>
