@@ -563,7 +563,9 @@ export default function VoteResult() {
                       disabled={Boolean(decisionAction)}
                       className="h-12 rounded-[24px] border border-[#dbe5f0] bg-white text-sm font-extrabold text-[#3182f6] transition-all hover:scale-[1.02] active:scale-[0.99] disabled:text-[#b0b8c1]"
                     >
-                      {decisionAction === "revote" ? "준비 중..." : "🗳 다시 투표"}
+                      {decisionAction === "revote"
+                        ? "준비 중..."
+                        : "🗳 1등 메뉴만 다시 투표"}
                     </button>
                   </div>
                 </>
