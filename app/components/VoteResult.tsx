@@ -512,6 +512,42 @@ export default function VoteResult() {
                       </span>
                     ))}
                   </div>
+                  <div className="relative mx-auto mt-5 flex h-64 w-64 items-center justify-center">
+                    <div className="absolute -top-1 z-10 h-0 w-0 border-x-[13px] border-t-[24px] border-x-transparent border-t-[#191f28]" />
+                    <div
+                      className="relative h-60 w-60 rounded-full border-[10px] border-white shadow-[0_14px_34px_rgba(25,31,40,0.12)]"
+                      style={{
+                        background: buildRouletteBackground(
+                          topMenus.map((item) => item.menu),
+                        ),
+                      }}
+                    >
+                      {topMenus.map((item, index) => {
+                        const segmentAngle = 360 / topMenus.length;
+                        const angle = index * segmentAngle + segmentAngle / 2;
+
+                        return (
+                          <div
+                            key={item.menu}
+                            className="absolute left-1/2 top-1/2 origin-left text-[13px] font-black text-[#191f28]"
+                            style={{
+                              transform: `rotate(${angle}deg) translateX(46px) rotate(90deg)`,
+                            }}
+                          >
+                            <span className="rounded-full bg-white/75 px-2 py-1 shadow-sm">
+                              {menuIcons[item.menu] || "🍽️"} {item.menu}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      <div className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-2xl font-black shadow-[0_8px_18px_rgba(25,31,40,0.16)]">
+                        GO
+                      </div>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-center text-xs font-bold text-[#8b95a1]">
+                    준비되면 버튼을 눌러 룰렛을 돌려보세요
+                  </p>
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <button
                       type="button"
@@ -519,7 +555,7 @@ export default function VoteResult() {
                       disabled={Boolean(decisionAction)}
                       className="h-12 rounded-[24px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.02] active:scale-[0.99] disabled:bg-[#d8dde3]"
                     >
-                      🎲 랜덤 룰렛
+                      🎲 룰렛 돌리기
                     </button>
                     <button
                       type="button"
