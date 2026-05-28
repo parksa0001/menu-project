@@ -473,8 +473,8 @@ export default function VoteResult() {
                           </div>
                         );
                       })}
-                      <div className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-2xl font-black shadow-[0_8px_18px_rgba(25,31,40,0.16)]">
-                        GO
+                      <div className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-base font-black shadow-[0_8px_18px_rgba(25,31,40,0.16)]">
+                        돌리기
                       </div>
                     </div>
                   </div>
@@ -540,9 +540,14 @@ export default function VoteResult() {
                           </div>
                         );
                       })}
-                      <div className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-2xl font-black shadow-[0_8px_18px_rgba(25,31,40,0.16)]">
-                        GO
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => saveDecision("random")}
+                        disabled={Boolean(decisionAction)}
+                        className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-base font-black shadow-[0_8px_18px_rgba(25,31,40,0.16)] transition-all hover:scale-105 active:scale-95 disabled:text-[#b0b8c1]"
+                      >
+                        돌리기
+                      </button>
                     </div>
                   </div>
                   <p className="mt-3 text-center text-xs font-bold text-[#8b95a1]">
@@ -551,17 +556,9 @@ export default function VoteResult() {
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => saveDecision("random")}
-                      disabled={Boolean(decisionAction)}
-                      className="h-12 rounded-[24px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.02] active:scale-[0.99] disabled:bg-[#d8dde3]"
-                    >
-                      🎲 룰렛 돌리기
-                    </button>
-                    <button
-                      type="button"
                       onClick={() => saveDecision("revote")}
                       disabled={Boolean(decisionAction)}
-                      className="h-12 rounded-[24px] border border-[#dbe5f0] bg-white text-sm font-extrabold text-[#3182f6] transition-all hover:scale-[1.02] active:scale-[0.99] disabled:text-[#b0b8c1]"
+                      className="col-span-2 h-12 rounded-[24px] border border-[#dbe5f0] bg-white text-sm font-extrabold text-[#3182f6] transition-all hover:scale-[1.02] active:scale-[0.99] disabled:text-[#b0b8c1]"
                     >
                       {decisionAction === "revote"
                         ? "준비 중..."
