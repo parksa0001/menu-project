@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 const participantLabels: Record<string, string> = {
@@ -167,6 +167,7 @@ const buildPopularMenus = (votes: StoredVote[]) => {
 };
 
 export default function VoteResult() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId") || "default";
   const participantKey =
@@ -190,6 +191,18 @@ export default function VoteResult() {
   const [selectedRevoteMenu, setSelectedRevoteMenu] = useState("");
   const [isSavingRevote, setIsSavingRevote] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [selectedFinalMenu, setSelectedFinalMenu] = useState("");
+  const [locationMode, setLocationMode] = useState<"search" | "current" | null>(
+    null,
+  );
+  const [locationQuery, setLocationQuery] = useState("");
+  const [locationLabel, setLocationLabel] = useState("");
+  const [locationCoords, setLocationCoords] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
+  const [locationError, setLocationError] = useState("");
+  const [isLocating, setIsLocating] = useState(false);
   const resultVotes = decision?.type === "revote" ? revoteVotes : votes;
   const popularMenus = buildPopularMenus(resultVotes);
   const topMenus = popularMenus.filter((item) => item.rank === 1);
@@ -209,6 +222,73 @@ export default function VoteResult() {
   const hasRevoted =
     typeof window !== "undefined" &&
     Boolean(localStorage.getItem(getRevoteKey(projectId)));
+  const finalMenuForLocation = selectedFinalMenu || finalMenus[0] || "";
+  const selectedLocationLabel =
+    locationMode === "search" ? locationQuery.trim() : locationLabel.trim();
+  const canRecommend = Boolean(finalMenuForLocation && selectedLocationLabel);
+
+  const selectSearchLocation = () => {
+    setLocationMode("search");
+    setLocationLabel("");
+    setLocationCoords(null);
+    setLocationError("");
+  };
+
+  const selectCurrentLocation = () => {
+    setLocationMode("current");
+    setLocationError("");
+    setLocationLabel("");
+    setLocationCoords(null);
+
+    if (!navigator.geolocation) {
+      setLocationError("현재 위치를 사용할 수 없는 브라우저예요.");
+      return;
+    }
+
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setLocationCoords({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+        setLocationLabel("현재 위치");
+        setIsLocating(false);
+      },
+      () => {
+        setLocationError("현재 위치를 가져오지 못했어요. 위치 검색을 사용해보세요.");
+        setIsLocating(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 8000,
+        maximumAge: 60000,
+      },
+    );
+  };
+
+  const goToRecommendations = () => {
+    if (!canRecommend) {
+      setLocationError("메뉴와 위치를 먼저 선택해주세요.");
+      return;
+    }
+
+    const nextParams = new URLSearchParams(searchParams.toString());
+
+    nextParams.set("projectId", projectId);
+    nextParams.set("menu", finalMenuForLocation);
+    nextParams.set("location", selectedLocationLabel);
+
+    if (locationCoords) {
+      nextParams.set("lat", String(locationCoords.lat));
+      nextParams.set("lng", String(locationCoords.lng));
+    } else {
+      nextParams.delete("lat");
+      nextParams.delete("lng");
+    }
+
+    router.push(`/recommend?${nextParams.toString()}`);
+  };
 
   const startRouletteAnimation = (winner: string, menus: string[]) => {
     const segmentAngle = 360 / menus.length;
@@ -772,6 +852,129 @@ export default function VoteResult() {
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {finalMenus.length > 0 && (
+            <div className="mt-5 rounded-[30px] border border-[#e8eef6] bg-[#f7fbff] p-4">
+              <div className="flex items-start gap-3">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[20px] bg-white text-2xl shadow-[0_6px_14px_rgba(25,31,40,0.04)]">
+                  📍
+                </span>
+                <div>
+                  <p className="text-lg font-black text-[#191f28]">
+                    어디에서 먹을까요?
+                  </p>
+                  <p className="mt-1 text-sm font-bold leading-relaxed text-[#6b7684]">
+                    위치를 선택하면 주변 맛집을 추천해드려요
+                  </p>
+                </div>
+              </div>
+
+              {finalMenus.length > 1 && (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-extrabold text-[#8b95a1]">
+                    추천받을 메뉴
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {finalMenus.map((menu) => {
+                      const isSelected = finalMenuForLocation === menu;
+
+                      return (
+                        <button
+                          type="button"
+                          key={menu}
+                          onClick={() => setSelectedFinalMenu(menu)}
+                          className={[
+                            "flex items-center gap-2 rounded-[22px] px-3 py-3 text-left text-sm font-black transition-all hover:scale-[1.01] active:scale-[0.99]",
+                            isSelected
+                              ? "border border-[#3182f6] bg-[#eaf3ff] text-[#3182f6]"
+                              : "border border-transparent bg-white text-[#191f28]",
+                          ].join(" ")}
+                        >
+                          <span className="text-2xl" aria-hidden="true">
+                            {menuIcons[menu] || "🍽️"}
+                          </span>
+                          {menu}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={selectSearchLocation}
+                  className={[
+                    "h-12 rounded-[24px] text-sm font-extrabold transition-all hover:scale-[1.02] active:scale-[0.99]",
+                    locationMode === "search"
+                      ? "border border-[#3182f6] bg-[#eaf3ff] text-[#3182f6]"
+                      : "border border-[#e8eef6] bg-white text-[#4e5968]",
+                  ].join(" ")}
+                >
+                  위치 검색
+                </button>
+                <button
+                  type="button"
+                  onClick={selectCurrentLocation}
+                  disabled={isLocating}
+                  className={[
+                    "h-12 rounded-[24px] text-sm font-extrabold transition-all hover:scale-[1.02] active:scale-[0.99] disabled:opacity-70",
+                    locationMode === "current"
+                      ? "border border-[#3182f6] bg-[#eaf3ff] text-[#3182f6]"
+                      : "border border-[#e8eef6] bg-white text-[#4e5968]",
+                  ].join(" ")}
+                >
+                  {isLocating ? "확인 중..." : "현재 위치 사용"}
+                </button>
+              </div>
+
+              {locationMode === "search" && (
+                <div className="mt-3">
+                  <input
+                    value={locationQuery}
+                    onChange={(event) => {
+                      setLocationQuery(event.target.value);
+                      setLocationError("");
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && canRecommend) {
+                        goToRecommendations();
+                      }
+                    }}
+                    placeholder="예: 강남역, 홍대입구, 성수동"
+                    className="h-12 w-full rounded-[24px] border border-[#e8eef6] bg-white px-4 text-sm font-bold text-[#191f28] outline-none transition-all placeholder:text-[#b0b8c1] focus:border-[#3182f6] focus:bg-[#f7fbff]"
+                  />
+                </div>
+              )}
+
+              {selectedLocationLabel && (
+                <div className="mt-3 rounded-[22px] bg-white px-4 py-3">
+                  <p className="text-xs font-extrabold text-[#8b95a1]">
+                    선택된 조건
+                  </p>
+                  <p className="mt-1 text-sm font-black text-[#191f28]">
+                    {selectedLocationLabel} 근처 {finalMenuForLocation} 맛집 추천
+                  </p>
+                </div>
+              )}
+
+              {locationError && (
+                <p className="mt-3 rounded-[18px] bg-white px-4 py-3 text-xs font-bold text-[#f04452]">
+                  {locationError}
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={goToRecommendations}
+                disabled={!canRecommend}
+                className="mt-3 h-12 w-full rounded-[24px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.01] active:scale-[0.99] disabled:bg-[#d8dde3] disabled:text-white"
+              >
+                맛집 추천 보러가기
+              </button>
             </div>
           )}
 
