@@ -3,24 +3,36 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-const fallbackPlaces = [
+const searchProviders = [
   {
-    id: "place-1",
+    id: "naver",
+    name: "네이버 지도 맛집 리스트",
+    icon: "🟢",
+    tone: "bg-[#e9f8ef]",
+    badge: "리뷰 많은 곳 찾기",
+    description: "방문자 리뷰, 사진, 영업시간을 같이 보면서 고르기 좋아요.",
+    buildUrl: (query: string) =>
+      `https://map.naver.com/p/search/${encodeURIComponent(query)}`,
+  },
+  {
+    id: "kakao",
+    name: "카카오맵 맛집 리스트",
+    icon: "🟡",
+    tone: "bg-[#fff7d6]",
+    badge: "친구에게 공유하기 편함",
+    description: "카카오톡으로 장소를 공유하기 쉬워서 약속 장소 정할 때 편해요.",
+    buildUrl: (query: string) =>
+      `https://map.kakao.com/link/search/${encodeURIComponent(query)}`,
+  },
+  {
+    id: "google",
+    name: "구글 지도 맛집 리스트",
+    icon: "🔵",
     tone: "bg-[#eaf3ff]",
-    badge: "가까운 후보",
-    description: "친구들이 모이기 편한 위치의 캐주얼한 맛집 후보예요.",
-  },
-  {
-    id: "place-2",
-    tone: "bg-[#fff4d8]",
-    badge: "인기 후보",
-    description: "리뷰와 분위기를 함께 보고 고르기 좋은 후보예요.",
-  },
-  {
-    id: "place-3",
-    tone: "bg-[#f1f8f4]",
-    badge: "편한 후보",
-    description: "대화하기 편하고 부담 없이 가기 좋은 후보예요.",
+    badge: "주변 후보 넓게 보기",
+    description: "지도에서 주변 후보를 넓게 훑어보고 이동 경로를 보기 좋아요.",
+    buildUrl: (query: string) =>
+      `https://www.google.com/maps/search/${encodeURIComponent(query)}`,
   },
 ];
 
@@ -31,13 +43,14 @@ export default function RestaurantRecommendations() {
   const lat = searchParams.get("lat");
   const lng = searchParams.get("lng");
   const [selectedPlaceId, setSelectedPlaceId] = useState("");
+  const query = `${location} ${menu} 맛집`;
   const places = useMemo(
     () =>
-      fallbackPlaces.map((place, index) => ({
-        ...place,
-        name: `${location} ${menu} 맛집 후보 ${index + 1}`,
+      searchProviders.map((provider) => ({
+        ...provider,
+        url: provider.buildUrl(query),
       })),
-    [location, menu],
+    [query],
   );
   const selectedPlace = places.find((place) => place.id === selectedPlaceId);
 
@@ -55,8 +68,8 @@ export default function RestaurantRecommendations() {
             {location} 근처 {menu} 맛집 추천
           </h1>
           <p className="mt-3 text-sm font-bold leading-relaxed text-[#6b7684]">
-            지금은 추천 화면으로 이동하는 구조를 준비했어요. 이후 지도/리뷰
-            API를 연결하면 실제 주변 맛집을 불러올 수 있어요.
+            지도 서비스에서 바로 확인할 수 있는 맛집 리스트를 준비했어요.
+            마음에 드는 곳을 골라 최종 장소를 정해보세요.
           </p>
         </header>
 
@@ -70,14 +83,14 @@ export default function RestaurantRecommendations() {
             </p>
             {lat && lng ? (
               <p className="mt-1 text-xs font-bold text-[#6b7684]">
-                현재 위치 좌표 기준으로 추천할 준비가 됐어요
+                현재 위치 좌표도 함께 전달할 수 있게 준비되어 있어요
               </p>
             ) : null}
           </div>
 
           <div className="mt-5">
             <p className="mb-3 text-sm font-extrabold text-[#4e5968]">
-              맛집 후보
+              맛집 리스트
             </p>
             <div className="space-y-3">
               {places.map((place) => {
@@ -102,7 +115,7 @@ export default function RestaurantRecommendations() {
                           place.tone,
                         ].join(" ")}
                       >
-                        🍽️
+                        {place.icon}
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-base font-black">
@@ -127,16 +140,35 @@ export default function RestaurantRecommendations() {
             </div>
           </div>
 
+          <a
+            href={selectedPlace?.url || "#"}
+            target="_blank"
+            rel="noreferrer"
+            aria-disabled={!selectedPlace}
+            onClick={(event) => {
+              if (!selectedPlace) {
+                event.preventDefault();
+              }
+            }}
+            className={[
+              "mt-5 flex h-[52px] w-full items-center justify-center rounded-[26px] text-sm font-extrabold text-white transition-all hover:scale-[1.01] active:scale-[0.99]",
+              selectedPlace
+                ? "bg-[#3182f6]"
+                : "pointer-events-none bg-[#d8dde3]",
+            ].join(" ")}
+          >
+            지도에서 맛집 리스트 보기
+          </a>
           <button
             type="button"
             disabled={!selectedPlace}
-            className="mt-5 h-[52px] w-full rounded-[26px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.01] active:scale-[0.99] disabled:bg-[#d8dde3]"
+            className="mt-3 h-[52px] w-full rounded-[26px] border border-[#dbe5f0] bg-white text-sm font-extrabold text-[#3182f6] transition-all hover:scale-[1.01] active:scale-[0.99] disabled:text-[#b0b8c1]"
           >
             최종 장소 결정
           </button>
           {!selectedPlace ? (
             <p className="mt-3 text-center text-xs font-bold text-[#8b95a1]">
-              마음에 드는 맛집 후보를 고르면 최종 장소를 정할 수 있어요
+              먼저 확인할 지도 리스트를 골라주세요
             </p>
           ) : null}
         </div>
