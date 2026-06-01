@@ -5,6 +5,9 @@ export type Project = {
   title: string | null;
   type: string | null;
   people_count: number | null;
+  final_place_name?: string | null;
+  final_place_address?: string | null;
+  final_place_phone?: string | null;
   created_at: string;
 };
 
