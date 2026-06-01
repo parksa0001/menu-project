@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 
 const KAKAO_JAVASCRIPT_KEY = "989f610781cb7f258b2028717879b287";
 const KAKAO_SDK_ID = "kakao-maps-sdk";
+const KAKAO_SDK_URL = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JAVASCRIPT_KEY}&autoload=false&libraries=services`;
 
 type KakaoPlace = {
   id: string;
@@ -50,6 +51,61 @@ declare global {
   }
 }
 
+const fallbackTypes = [
+  {
+    id: "nearby",
+    title: "가까운 맛집",
+    category: "이동 편한 후보",
+    keyword: "가까운",
+    description: "약속 장소에서 이동하기 편한 후보를 먼저 확인해보세요.",
+  },
+  {
+    id: "review",
+    title: "리뷰 좋은 맛집",
+    category: "리뷰 확인 후보",
+    keyword: "리뷰 좋은",
+    description: "사진과 방문자 리뷰를 보고 고르기 좋은 후보예요.",
+  },
+  {
+    id: "group",
+    title: "단체 가능 맛집",
+    category: "친구 모임 후보",
+    keyword: "단체",
+    description: "여러 명이 같이 앉기 편한 곳을 찾을 때 좋아요.",
+  },
+  {
+    id: "late",
+    title: "늦게까지 하는 맛집",
+    category: "저녁 약속 후보",
+    keyword: "늦게까지",
+    description: "늦은 저녁이나 술자리 이후에도 여유 있는 후보예요.",
+  },
+  {
+    id: "value",
+    title: "가성비 맛집",
+    category: "부담 적은 후보",
+    keyword: "가성비",
+    description: "친구들과 부담 없이 고르기 좋은 캐주얼한 후보예요.",
+  },
+];
+
+const buildFallbackPlaces = (location: string, menu: string): KakaoPlace[] =>
+  fallbackTypes.map((type) => {
+    const query = `${location} ${type.keyword} ${menu} 맛집`.trim();
+
+    return {
+      id: `fallback-${type.id}`,
+      place_name: `${location || "근처"} ${type.title}`,
+      category_name: type.category,
+      road_address_name: type.description,
+      address_name: type.description,
+      phone: "",
+      place_url: `https://map.kakao.com/link/search/${encodeURIComponent(query)}`,
+      x: "",
+      y: "",
+    };
+  });
+
 const loadKakaoMaps = () =>
   new Promise<void>((resolve, reject) => {
     if (window.kakao?.maps?.services) {
@@ -57,37 +113,47 @@ const loadKakaoMaps = () =>
       return;
     }
 
-    const existingScript = document.getElementById(KAKAO_SDK_ID);
-
-    if (existingScript) {
-      existingScript.addEventListener(
-        "load",
-        () => window.kakao?.maps.load(resolve),
-        { once: true },
-      );
-      existingScript.addEventListener("error", reject, { once: true });
-      return;
-    }
+    document.getElementById(KAKAO_SDK_ID)?.remove();
 
     const script = document.createElement("script");
+    const timeoutId = window.setTimeout(() => {
+      script.remove();
+      reject(new Error("Kakao Maps SDK load timeout"));
+    }, 8000);
 
     script.id = KAKAO_SDK_ID;
-    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JAVASCRIPT_KEY}&libraries=services&autoload=false`;
+    script.src = KAKAO_SDK_URL;
     script.async = true;
-    script.onload = () => window.kakao?.maps.load(resolve);
-    script.onerror = () => reject(new Error("Kakao Maps SDK load failed"));
+    script.referrerPolicy = "origin";
+    script.onload = () => {
+      window.clearTimeout(timeoutId);
+
+      if (!window.kakao?.maps) {
+        reject(new Error("Kakao Maps SDK is not available"));
+        return;
+      }
+
+      window.kakao.maps.load(() => {
+        if (window.kakao?.maps?.services) {
+          resolve();
+          return;
+        }
+
+        reject(new Error("Kakao Places service is not available"));
+      });
+    };
+    script.onerror = () => {
+      window.clearTimeout(timeoutId);
+      reject(new Error("Kakao Maps SDK load failed"));
+    };
 
     document.head.appendChild(script);
   });
 
 const formatDistance = (distance?: string) => {
-  if (!distance) {
-    return "";
-  }
-
   const meters = Number(distance);
 
-  if (!Number.isFinite(meters)) {
+  if (!distance || !Number.isFinite(meters)) {
     return "";
   }
 
@@ -110,35 +176,27 @@ export default function RestaurantRecommendations() {
   const [isSdkReady, setIsSdkReady] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [message, setMessage] = useState("");
-  const selectedPlace = places.find((place) => place.id === selectedPlaceId);
   const keyword = useMemo(
     () => `${locationInput.trim()} ${menu} 맛집`.trim(),
     [locationInput, menu],
   );
-
-  useEffect(() => {
-    let isMounted = true;
-
-    loadKakaoMaps()
-      .then(() => {
-        if (isMounted) {
-          setIsSdkReady(true);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setMessage("카카오맵을 불러오지 못했어요. 잠시 후 다시 시도해주세요.");
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  const fallbackPlaces = useMemo(
+    () => buildFallbackPlaces(locationInput.trim(), menu),
+    [locationInput, menu],
+  );
+  const visiblePlaces = places.length > 0 ? places : fallbackPlaces;
+  const selectedPlace = visiblePlaces.find((place) => place.id === selectedPlaceId);
 
   const searchRestaurants = () => {
-    if (!window.kakao?.maps?.services || !keyword) {
+    if (!keyword) {
       setMessage("위치와 메뉴를 확인해주세요.");
+      return;
+    }
+
+    if (!window.kakao?.maps?.services) {
+      setMessage(
+        "카카오맵 연결이 막혀 기본 추천 리스트를 보여드려요. 도메인 등록을 확인하면 실제 장소가 바로 표시돼요.",
+      );
       return;
     }
 
@@ -174,15 +232,37 @@ export default function RestaurantRecommendations() {
         setPlaces([]);
 
         if (status === window.kakao?.maps.services.Status.ZERO_RESULT) {
-          setMessage("검색 결과가 없어요. 위치를 조금 더 넓게 입력해보세요.");
+          setMessage("검색 결과가 없어요. 기본 추천 리스트를 보여드릴게요.");
           return;
         }
 
-        setMessage("맛집 검색에 실패했어요. 다시 시도해주세요.");
+        setMessage("맛집 검색에 실패했어요. 기본 추천 리스트를 보여드릴게요.");
       },
       options,
     );
   };
+
+  useEffect(() => {
+    let isMounted = true;
+
+    loadKakaoMaps()
+      .then(() => {
+        if (isMounted) {
+          setIsSdkReady(true);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setMessage(
+            "카카오맵 연결이 막혀 기본 추천 리스트를 보여드려요. 도메인 등록을 확인하면 실제 장소가 바로 표시돼요.",
+          );
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (isSdkReady && keyword) {
@@ -207,16 +287,14 @@ export default function RestaurantRecommendations() {
             {locationInput || "선택한 위치"} 근처 {menu} 맛집
           </h1>
           <p className="mt-3 text-sm font-bold leading-relaxed text-[#6b7684]">
-            카카오맵 장소 검색으로 주변 맛집을 찾아봤어요. 위치를 바꾸면 바로
-            다른 후보도 확인할 수 있어요.
+            카카오맵 장소 검색으로 주변 맛집을 찾아봤어요. 연결이 막혀도 기본
+            후보를 먼저 보여드려요.
           </p>
         </header>
 
         <div className="rounded-[34px] border border-[#edf1f5] bg-white p-5 shadow-[0_4px_14px_rgba(25,31,40,0.035)]">
           <div className="rounded-[28px] bg-[#f7fbff] px-4 py-4">
-            <p className="text-xs font-extrabold text-[#8b95a1]">
-              검색 조건
-            </p>
+            <p className="text-xs font-extrabold text-[#8b95a1]">검색 조건</p>
             <p className="mt-1 text-lg font-black">{keyword || `${menu} 맛집`}</p>
             {lat && lng ? (
               <p className="mt-1 text-xs font-bold text-[#6b7684]">
@@ -240,7 +318,7 @@ export default function RestaurantRecommendations() {
             <button
               type="button"
               onClick={searchRestaurants}
-              disabled={!isSdkReady || isSearching || !locationInput.trim()}
+              disabled={isSearching || !locationInput.trim()}
               className="h-12 rounded-[24px] bg-[#3182f6] px-5 text-sm font-extrabold text-white transition-all hover:scale-[1.02] active:scale-[0.99] disabled:bg-[#d8dde3]"
             >
               검색
@@ -253,18 +331,18 @@ export default function RestaurantRecommendations() {
                 맛집 리스트
               </p>
               <span className="text-xs font-extrabold text-[#3182f6]">
-                {isSearching ? "검색 중..." : `${places.length}곳`}
+                {isSearching ? "검색 중..." : `${visiblePlaces.length}곳`}
               </span>
             </div>
 
             {message ? (
-              <div className="rounded-[24px] bg-[#f7f8fa] px-4 py-4 text-sm font-bold leading-relaxed text-[#6b7684]">
+              <div className="mb-3 rounded-[24px] bg-[#f7f8fa] px-4 py-4 text-sm font-bold leading-relaxed text-[#6b7684]">
                 {message}
               </div>
             ) : null}
 
             <div className="space-y-3">
-              {places.map((place, index) => {
+              {visiblePlaces.map((place, index) => {
                 const isSelected = selectedPlaceId === place.id;
                 const address = place.road_address_name || place.address_name;
                 const distance = formatDistance(place.distance);
