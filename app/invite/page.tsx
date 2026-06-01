@@ -1,18 +1,20 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-// TODO: Kakao JavaScript 앱 키를 발급받아 입력하세요.
-const KAKAO_JAVASCRIPT_KEY = "";
-const KAKAO_SDK_URL = "https://developers.kakao.com/sdk/js/kakao.js";
+const KAKAO_JAVASCRIPT_KEY = "989f610781cb7f258b2028717879b287";
+const KAKAO_SDK_ID = "kakao-javascript-sdk";
+const KAKAO_SDK_URL = "https://t1.kakaocdn.net/kakao_js_sdk/2.8.1/kakao.min.js";
 const PRODUCTION_ORIGIN = "https://menu-project-three-ruddy.vercel.app";
+
 const meetingTypeLabels: Record<string, string> = {
   offline: "만나서 먹기",
   delivery: "배달",
   drink: "술자리",
   meal: "식사",
 };
+
 const participantLabels: Record<string, string> = {
   "2": "2명",
   "3": "3명",
@@ -35,35 +37,83 @@ const participantLabels: Record<string, string> = {
   "20": "20명",
 };
 
+type KakaoShareOptions = {
+  objectType: "feed";
+  content: {
+    title: string;
+    description: string;
+    imageUrl: string;
+    link: {
+      mobileWebUrl: string;
+      webUrl: string;
+    };
+  };
+  buttons: Array<{
+    title: string;
+    link: {
+      mobileWebUrl: string;
+      webUrl: string;
+    };
+  }>;
+};
+
 declare global {
   interface Window {
     Kakao?: {
       init: (key: string) => void;
       isInitialized: () => boolean;
       Share?: {
-        sendDefault: (options: {
-          objectType: "feed";
-          content: {
-            title: string;
-            description: string;
-            imageUrl: string;
-            link: {
-              mobileWebUrl: string;
-              webUrl: string;
-            };
-          };
-          buttons: Array<{
-            title: string;
-            link: {
-              mobileWebUrl: string;
-              webUrl: string;
-            };
-          }>;
-        }) => void;
+        sendDefault: (options: KakaoShareOptions) => void;
       };
     };
   }
 }
+
+const getCurrentOrigin = () => {
+  if (typeof window === "undefined") {
+    return PRODUCTION_ORIGIN;
+  }
+
+  return window.location.origin;
+};
+
+const loadKakaoSdk = () =>
+  new Promise<void>((resolve, reject) => {
+    if (window.Kakao) {
+      if (!window.Kakao.isInitialized()) {
+        window.Kakao.init(KAKAO_JAVASCRIPT_KEY);
+      }
+
+      resolve();
+      return;
+    }
+
+    const existingScript = document.getElementById(KAKAO_SDK_ID);
+
+    if (existingScript) {
+      existingScript.remove();
+    }
+
+    const script = document.createElement("script");
+
+    script.id = KAKAO_SDK_ID;
+    script.src = KAKAO_SDK_URL;
+    script.async = true;
+    script.onload = () => {
+      if (!window.Kakao) {
+        reject(new Error("Kakao SDK is not available"));
+        return;
+      }
+
+      if (!window.Kakao.isInitialized()) {
+        window.Kakao.init(KAKAO_JAVASCRIPT_KEY);
+      }
+
+      resolve();
+    };
+    script.onerror = () => reject(new Error("Kakao SDK load failed"));
+    document.head.appendChild(script);
+  });
 
 function InviteContent() {
   const searchParams = useSearchParams();
@@ -74,70 +124,60 @@ function InviteContent() {
   const participantKey =
     searchParams.get("participants") || searchParams.get("otherParticipants") || "4";
   const participantLabel = participantLabels[participantKey] || `${participantKey}명`;
-  const normalizedSearchParams = new URLSearchParams(searchParams.toString());
+  const joinPath = useMemo(() => {
+    const normalizedSearchParams = new URLSearchParams(searchParams.toString());
 
-  if (!normalizedSearchParams.get("participants")) {
-    normalizedSearchParams.set("participants", participantKey);
-  }
-
-  normalizedSearchParams.delete("otherParticipants");
-
-  const joinPath = `/join?${normalizedSearchParams.toString()}`;
-  const participantUrl = `${PRODUCTION_ORIGIN}${joinPath}`;
-
-  useEffect(() => {
-    if (!KAKAO_JAVASCRIPT_KEY || window.Kakao) {
-      return;
+    if (!normalizedSearchParams.get("participants")) {
+      normalizedSearchParams.set("participants", participantKey);
     }
 
-    const script = document.createElement("script");
-    script.src = KAKAO_SDK_URL;
-    script.async = true;
-    script.onload = () => {
-      if (window.Kakao && !window.Kakao.isInitialized()) {
-        window.Kakao.init(KAKAO_JAVASCRIPT_KEY);
-      }
-    };
-    document.head.appendChild(script);
+    normalizedSearchParams.delete("otherParticipants");
+
+    return `/join?${normalizedSearchParams.toString()}`;
+  }, [participantKey, searchParams]);
+  const getParticipantUrl = () => `${getCurrentOrigin()}${joinPath}`;
+
+  useEffect(() => {
+    loadKakaoSdk().catch(() => {
+      // Link copy remains available when the SDK is blocked or unavailable.
+    });
   }, []);
 
   const moveToMenu = () => {
     window.location.assign(joinPath);
   };
 
-  const showCopiedNotice = () => {
-    setNotice("링크가 복사됐어요");
+  const showNotice = (message: string) => {
+    setNotice(message);
     window.setTimeout(() => setNotice(""), 1600);
   };
 
   const copyInviteLink = async () => {
-    if (participantUrl) {
-      try {
-        await navigator.clipboard?.writeText(participantUrl);
-      } catch {
-        // Clipboard can be blocked in some embedded browsers; keep the user-facing fallback gentle.
-      }
-      showCopiedNotice();
+    try {
+      await navigator.clipboard?.writeText(getParticipantUrl());
+    } catch {
+      // Clipboard can be blocked in some embedded browsers; keep the fallback quiet.
     }
+
+    showNotice("링크가 복사됐어요");
   };
 
   const shareToKakao = async () => {
     try {
-      if (
-        !KAKAO_JAVASCRIPT_KEY ||
-        !window.Kakao ||
-        !window.Kakao.isInitialized() ||
-        !window.Kakao.Share
-      ) {
-        throw new Error("Kakao SDK is not ready");
+      await loadKakaoSdk();
+
+      if (!window.Kakao || !window.Kakao.isInitialized() || !window.Kakao.Share) {
+        throw new Error("Kakao Share is not ready");
       }
+
+      const participantUrl = getParticipantUrl();
 
       window.Kakao.Share.sendDefault({
         objectType: "feed",
         content: {
           title: "우리 뭐 먹지?",
-          description: "친구들과 같이 먹고 싶은 메뉴를 골라보세요",
-          imageUrl: `${PRODUCTION_ORIGIN}/next.svg`,
+          description: "친구들과 같이 메뉴를 골라보세요",
+          imageUrl: `${getCurrentOrigin()}/next.svg`,
           link: {
             mobileWebUrl: participantUrl,
             webUrl: participantUrl,
@@ -155,6 +195,7 @@ function InviteContent() {
       });
     } catch {
       await copyInviteLink();
+      showNotice("공유창을 열지 못해서 링크를 복사했어요");
     }
   };
 
@@ -163,7 +204,7 @@ function InviteContent() {
       <section className="mx-auto flex w-full max-w-md flex-col">
         <header className="mb-6 text-center">
           <div className="mx-auto mb-5 flex h-24 w-24 items-center justify-center rounded-[36px] bg-[#eaf3ff] text-5xl shadow-[0_8px_20px_rgba(49,130,246,0.08)]">
-            🎉
+            🍻
           </div>
           <div className="mb-3 inline-flex rounded-full bg-white px-3 py-1 text-[11px] font-extrabold text-[#3182f6]">
             {meetingTypeLabel}
@@ -189,7 +230,7 @@ function InviteContent() {
                 현재 0 / {participantLabel} 참여중
               </span>
               <span className="text-2xl" aria-hidden="true">
-                🙋
+                👥
               </span>
             </div>
           </div>
