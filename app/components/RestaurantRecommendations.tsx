@@ -96,13 +96,20 @@ export default function RestaurantRecommendations() {
   const [selectedPlaceId, setSelectedPlaceId] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [message, setMessage] = useState("");
+  const hasCoordinates = Boolean(lat && lng);
+  const isCurrentLocationLabel =
+    hasCoordinates && locationInput.trim().includes("현재 위치");
+  const searchLocation = isCurrentLocationLabel ? "" : locationInput.trim();
   const keyword = useMemo(
-    () => `${locationInput.trim()} ${menu} 맛집`.trim(),
-    [locationInput, menu],
+    () =>
+      searchLocation
+        ? `${searchLocation} ${menu}`.trim()
+        : `${menu} 음식점`.trim(),
+    [searchLocation, menu],
   );
   const fallbackPlaces = useMemo(
-    () => buildFallbackPlaces(locationInput.trim(), menu),
-    [locationInput, menu],
+    () => buildFallbackPlaces(searchLocation || "현재 위치", menu),
+    [searchLocation, menu],
   );
   const visiblePlaces = places.length > 0 ? places : fallbackPlaces;
   const selectedPlace = visiblePlaces.find((place) => place.id === selectedPlaceId);
@@ -122,7 +129,7 @@ export default function RestaurantRecommendations() {
       size: "10",
     });
 
-    if (lat && lng) {
+    if (hasCoordinates) {
       params.set("lat", lat);
       params.set("lng", lng);
     }
@@ -185,7 +192,7 @@ export default function RestaurantRecommendations() {
           <div className="rounded-[28px] bg-[#f7fbff] px-4 py-4">
             <p className="text-xs font-extrabold text-[#8b95a1]">검색 조건</p>
             <p className="mt-1 text-lg font-black">{keyword || `${menu} 맛집`}</p>
-            {lat && lng ? (
+            {hasCoordinates ? (
               <p className="mt-1 text-xs font-bold text-[#6b7684]">
                 현재 위치 기준으로 가까운 순서도 반영해요
               </p>
