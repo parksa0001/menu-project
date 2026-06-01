@@ -177,7 +177,7 @@ function InviteContent() {
         content: {
           title: "우리 뭐 먹지?",
           description: "친구들과 같이 메뉴를 골라보세요",
-          imageUrl: `${getCurrentOrigin()}/next.svg`,
+          imageUrl: `${getCurrentOrigin()}/og-image.png`,
           link: {
             mobileWebUrl: participantUrl,
             webUrl: participantUrl,
