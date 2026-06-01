@@ -3,38 +3,56 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-const searchProviders = [
+const recommendationTypes = [
   {
-    id: "naver",
-    name: "네이버 지도 맛집 리스트",
-    icon: "🟢",
-    tone: "bg-[#e9f8ef]",
-    badge: "리뷰 많은 곳 찾기",
-    description: "방문자 리뷰, 사진, 영업시간을 같이 보면서 고르기 좋아요.",
-    buildUrl: (query: string) =>
-      `https://map.naver.com/p/search/${encodeURIComponent(query)}`,
-  },
-  {
-    id: "kakao",
-    name: "카카오맵 맛집 리스트",
-    icon: "🟡",
-    tone: "bg-[#fff7d6]",
-    badge: "친구에게 공유하기 편함",
-    description: "카카오톡으로 장소를 공유하기 쉬워서 약속 장소 정할 때 편해요.",
-    buildUrl: (query: string) =>
-      `https://map.kakao.com/link/search/${encodeURIComponent(query)}`,
-  },
-  {
-    id: "google",
-    name: "구글 지도 맛집 리스트",
-    icon: "🔵",
+    id: "nearby",
+    title: "가까운 맛집",
+    icon: "📍",
     tone: "bg-[#eaf3ff]",
-    badge: "주변 후보 넓게 보기",
-    description: "지도에서 주변 후보를 넓게 훑어보고 이동 경로를 보기 좋아요.",
-    buildUrl: (query: string) =>
-      `https://www.google.com/maps/search/${encodeURIComponent(query)}`,
+    badge: "이동 편함",
+    description: "지금 위치나 약속 장소에서 가볍게 이동하기 좋은 후보예요.",
+    keyword: "가까운",
+  },
+  {
+    id: "review",
+    title: "리뷰 좋은 맛집",
+    icon: "⭐",
+    tone: "bg-[#fff7d6]",
+    badge: "평점 확인",
+    description: "리뷰와 사진을 같이 보고 실패 확률을 줄이기 좋은 후보예요.",
+    keyword: "리뷰 좋은",
+  },
+  {
+    id: "group",
+    title: "단체 가능 맛집",
+    icon: "👥",
+    tone: "bg-[#f1f8f4]",
+    badge: "친구 모임",
+    description: "여러 명이 같이 앉기 편한 곳을 우선으로 볼 때 좋아요.",
+    keyword: "단체",
+  },
+  {
+    id: "late",
+    title: "늦게까지 하는 맛집",
+    icon: "🌙",
+    tone: "bg-[#f5f0ff]",
+    badge: "저녁 약속",
+    description: "술약속이나 늦은 저녁에도 여유 있게 갈 수 있는 후보예요.",
+    keyword: "늦게까지",
+  },
+  {
+    id: "value",
+    title: "가성비 맛집",
+    icon: "💙",
+    tone: "bg-[#eef6ff]",
+    badge: "부담 적음",
+    description: "친구들과 부담 없이 고르기 좋은 캐주얼한 후보예요.",
+    keyword: "가성비",
   },
 ];
+
+const buildMapUrl = (query: string) =>
+  `https://map.naver.com/p/search/${encodeURIComponent(query)}`;
 
 export default function RestaurantRecommendations() {
   const searchParams = useSearchParams();
@@ -43,14 +61,19 @@ export default function RestaurantRecommendations() {
   const lat = searchParams.get("lat");
   const lng = searchParams.get("lng");
   const [selectedPlaceId, setSelectedPlaceId] = useState("");
-  const query = `${location} ${menu} 맛집`;
   const places = useMemo(
     () =>
-      searchProviders.map((provider) => ({
-        ...provider,
-        url: provider.buildUrl(query),
-      })),
-    [query],
+      recommendationTypes.map((type) => {
+        const query = `${location} ${type.keyword} ${menu} 맛집`;
+
+        return {
+          ...type,
+          name: `${location} ${type.title}`,
+          query,
+          url: buildMapUrl(query),
+        };
+      }),
+    [location, menu],
   );
   const selectedPlace = places.find((place) => place.id === selectedPlaceId);
 
@@ -68,8 +91,8 @@ export default function RestaurantRecommendations() {
             {location} 근처 {menu} 맛집 추천
           </h1>
           <p className="mt-3 text-sm font-bold leading-relaxed text-[#6b7684]">
-            지도 서비스에서 바로 확인할 수 있는 맛집 리스트를 준비했어요.
-            마음에 드는 곳을 골라 최종 장소를 정해보세요.
+            우리 앱 안에서 먼저 후보를 정리해봤어요. 마음에 드는 후보를 고르고,
+            필요하면 지도에서 실제 가게를 확인해보세요.
           </p>
         </header>
 
@@ -90,85 +113,78 @@ export default function RestaurantRecommendations() {
 
           <div className="mt-5">
             <p className="mb-3 text-sm font-extrabold text-[#4e5968]">
-              맛집 리스트
+              맛집 추천 리스트
             </p>
             <div className="space-y-3">
               {places.map((place) => {
                 const isSelected = selectedPlaceId === place.id;
 
                 return (
-                  <button
-                    type="button"
+                  <div
                     key={place.id}
-                    onClick={() => setSelectedPlaceId(place.id)}
                     className={[
-                      "w-full rounded-[26px] border p-4 text-left transition-all hover:scale-[1.01] active:scale-[0.99]",
+                      "rounded-[26px] border p-4 transition-all",
                       isSelected
                         ? "border-[#3182f6] bg-[#eaf3ff]"
                         : "border-transparent bg-[#f7f8fa]",
                     ].join(" ")}
                   >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={[
-                          "flex h-12 w-12 items-center justify-center rounded-[20px] text-2xl",
-                          place.tone,
-                        ].join(" ")}
-                      >
-                        {place.icon}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-base font-black">
-                          {place.name}
-                        </p>
-                        <p className="mt-1 text-xs font-extrabold text-[#3182f6]">
-                          {place.badge}
-                        </p>
-                      </div>
-                      {isSelected ? (
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#3182f6] text-sm font-black text-white">
-                          ✓
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPlaceId(place.id)}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={[
+                            "flex h-12 w-12 items-center justify-center rounded-[20px] text-2xl",
+                            place.tone,
+                          ].join(" ")}
+                        >
+                          {place.icon}
                         </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-3 text-sm font-bold leading-relaxed text-[#6b7684]">
-                      {place.description}
-                    </p>
-                  </button>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-base font-black">
+                            {place.name}
+                          </p>
+                          <p className="mt-1 text-xs font-extrabold text-[#3182f6]">
+                            {place.badge}
+                          </p>
+                        </div>
+                        {isSelected ? (
+                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#3182f6] text-sm font-black text-white">
+                            ✓
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-3 text-sm font-bold leading-relaxed text-[#6b7684]">
+                        {place.description}
+                      </p>
+                    </button>
+                    <a
+                      href={place.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-3 inline-flex h-9 items-center rounded-full bg-white px-4 text-xs font-extrabold text-[#3182f6] shadow-[0_4px_12px_rgba(25,31,40,0.04)]"
+                    >
+                      지도에서 실제 가게 보기
+                    </a>
+                  </div>
                 );
               })}
             </div>
           </div>
 
-          <a
-            href={selectedPlace?.url || "#"}
-            target="_blank"
-            rel="noreferrer"
-            aria-disabled={!selectedPlace}
-            onClick={(event) => {
-              if (!selectedPlace) {
-                event.preventDefault();
-              }
-            }}
-            className={[
-              "mt-5 flex h-[52px] w-full items-center justify-center rounded-[26px] text-sm font-extrabold text-white transition-all hover:scale-[1.01] active:scale-[0.99]",
-              selectedPlace
-                ? "bg-[#3182f6]"
-                : "pointer-events-none bg-[#d8dde3]",
-            ].join(" ")}
-          >
-            지도에서 맛집 리스트 보기
-          </a>
           <button
             type="button"
             disabled={!selectedPlace}
-            className="mt-3 h-[52px] w-full rounded-[26px] border border-[#dbe5f0] bg-white text-sm font-extrabold text-[#3182f6] transition-all hover:scale-[1.01] active:scale-[0.99] disabled:text-[#b0b8c1]"
+            className="mt-5 h-[52px] w-full rounded-[26px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.01] active:scale-[0.99] disabled:bg-[#d8dde3]"
           >
-            최종 장소 결정
+            {selectedPlace ? `${selectedPlace.title}로 정하기` : "후보를 골라주세요"}
           </button>
           {!selectedPlace ? (
             <p className="mt-3 text-center text-xs font-bold text-[#8b95a1]">
-              먼저 확인할 지도 리스트를 골라주세요
+              리스트에서 마음에 드는 후보를 먼저 골라주세요
             </p>
           ) : null}
         </div>
