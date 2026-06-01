@@ -3,10 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
-const KAKAO_JAVASCRIPT_KEY = "989f610781cb7f258b2028717879b287";
-const KAKAO_SDK_ID = "kakao-maps-sdk";
-const KAKAO_SDK_URL = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JAVASCRIPT_KEY}&autoload=false&libraries=services`;
-
 type KakaoPlace = {
   id: string;
   place_name: string;
@@ -19,37 +15,6 @@ type KakaoPlace = {
   y: string;
   distance?: string;
 };
-
-type KakaoStatus = {
-  OK: string;
-  ZERO_RESULT: string;
-  ERROR: string;
-};
-
-declare global {
-  interface Window {
-    kakao?: {
-      maps: {
-        load: (callback: () => void) => void;
-        LatLng: new (lat: number, lng: number) => unknown;
-        services: {
-          Places: new () => {
-            keywordSearch: (
-              keyword: string,
-              callback: (data: KakaoPlace[], status: string) => void,
-              options?: Record<string, unknown>,
-            ) => void;
-          };
-          Status: KakaoStatus;
-          SortBy: {
-            ACCURACY: string;
-            DISTANCE: string;
-          };
-        };
-      };
-    };
-  }
-}
 
 const fallbackTypes = [
   {
@@ -106,50 +71,6 @@ const buildFallbackPlaces = (location: string, menu: string): KakaoPlace[] =>
     };
   });
 
-const loadKakaoMaps = () =>
-  new Promise<void>((resolve, reject) => {
-    if (window.kakao?.maps?.services) {
-      resolve();
-      return;
-    }
-
-    document.getElementById(KAKAO_SDK_ID)?.remove();
-
-    const script = document.createElement("script");
-    const timeoutId = window.setTimeout(() => {
-      script.remove();
-      reject(new Error("Kakao Maps SDK load timeout"));
-    }, 8000);
-
-    script.id = KAKAO_SDK_ID;
-    script.src = KAKAO_SDK_URL;
-    script.async = true;
-    script.referrerPolicy = "origin";
-    script.onload = () => {
-      window.clearTimeout(timeoutId);
-
-      if (!window.kakao?.maps) {
-        reject(new Error("Kakao Maps SDK is not available"));
-        return;
-      }
-
-      window.kakao.maps.load(() => {
-        if (window.kakao?.maps?.services) {
-          resolve();
-          return;
-        }
-
-        reject(new Error("Kakao Places service is not available"));
-      });
-    };
-    script.onerror = () => {
-      window.clearTimeout(timeoutId);
-      reject(new Error("Kakao Maps SDK load failed"));
-    };
-
-    document.head.appendChild(script);
-  });
-
 const formatDistance = (distance?: string) => {
   const meters = Number(distance);
 
@@ -168,12 +89,11 @@ export default function RestaurantRecommendations() {
   const searchParams = useSearchParams();
   const menu = searchParams.get("menu") || "메뉴";
   const initialLocation = searchParams.get("location") || "";
-  const lat = searchParams.get("lat");
-  const lng = searchParams.get("lng");
+  const lat = searchParams.get("lat") || "";
+  const lng = searchParams.get("lng") || "";
   const [locationInput, setLocationInput] = useState(initialLocation);
   const [places, setPlaces] = useState<KakaoPlace[]>([]);
   const [selectedPlaceId, setSelectedPlaceId] = useState("");
-  const [isSdkReady, setIsSdkReady] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [message, setMessage] = useState("");
   const keyword = useMemo(
@@ -187,16 +107,9 @@ export default function RestaurantRecommendations() {
   const visiblePlaces = places.length > 0 ? places : fallbackPlaces;
   const selectedPlace = visiblePlaces.find((place) => place.id === selectedPlaceId);
 
-  const searchRestaurants = () => {
+  const searchRestaurants = async () => {
     if (!keyword) {
       setMessage("위치와 메뉴를 확인해주세요.");
-      return;
-    }
-
-    if (!window.kakao?.maps?.services) {
-      setMessage(
-        "카카오맵 연결이 막혀 기본 추천 리스트를 보여드려요. 도메인 등록을 확인하면 실제 장소가 바로 표시돼요.",
-      );
       return;
     }
 
@@ -204,74 +117,50 @@ export default function RestaurantRecommendations() {
     setMessage("");
     setSelectedPlaceId("");
 
-    const placesService = new window.kakao.maps.services.Places();
-    const options: Record<string, unknown> = {
-      size: 10,
-      sort: window.kakao.maps.services.SortBy.ACCURACY,
-    };
-    const latitude = Number(lat);
-    const longitude = Number(lng);
+    const params = new URLSearchParams({
+      query: keyword,
+      size: "10",
+    });
 
-    if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
-      options.location = new window.kakao.maps.LatLng(latitude, longitude);
-      options.radius = 5000;
-      options.sort = window.kakao.maps.services.SortBy.DISTANCE;
+    if (lat && lng) {
+      params.set("lat", lat);
+      params.set("lng", lng);
     }
 
-    placesService.keywordSearch(
-      keyword,
-      (data, status) => {
-        setIsSearching(false);
+    try {
+      const response = await fetch(`/api/kakao/places?${params.toString()}`);
+      const payload = await response.json();
 
-        if (status === window.kakao?.maps.services.Status.OK) {
-          setPlaces(data);
-          setMessage("");
-          return;
-        }
+      if (!response.ok) {
+        throw new Error(payload.error || "Kakao search failed");
+      }
 
-        setPlaces([]);
+      const documents = Array.isArray(payload.documents)
+        ? (payload.documents as KakaoPlace[])
+        : [];
 
-        if (status === window.kakao?.maps.services.Status.ZERO_RESULT) {
-          setMessage("검색 결과가 없어요. 기본 추천 리스트를 보여드릴게요.");
-          return;
-        }
-
-        setMessage("맛집 검색에 실패했어요. 기본 추천 리스트를 보여드릴게요.");
-      },
-      options,
-    );
+      setPlaces(documents);
+      setMessage(
+        documents.length > 0
+          ? ""
+          : "검색 결과가 없어요. 기본 추천 리스트를 보여드릴게요.",
+      );
+    } catch {
+      setPlaces([]);
+      setMessage(
+        "카카오 REST API 연결이 아직 준비되지 않아 기본 추천 리스트를 보여드려요. KAKAO_REST_API_KEY를 설정하면 실제 가게명이 바로 표시돼요.",
+      );
+    } finally {
+      setIsSearching(false);
+    }
   };
 
   useEffect(() => {
-    let isMounted = true;
+    const timeoutId = window.setTimeout(searchRestaurants, 0);
 
-    loadKakaoMaps()
-      .then(() => {
-        if (isMounted) {
-          setIsSdkReady(true);
-        }
-      })
-      .catch(() => {
-        if (isMounted) {
-          setMessage(
-            "카카오맵 연결이 막혀 기본 추천 리스트를 보여드려요. 도메인 등록을 확인하면 실제 장소가 바로 표시돼요.",
-          );
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (isSdkReady && keyword) {
-      const timeoutId = window.setTimeout(searchRestaurants, 0);
-
-      return () => window.clearTimeout(timeoutId);
-    }
+    return () => window.clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSdkReady]);
+  }, []);
 
   return (
     <main className="min-h-screen bg-[#f7f8fa] px-5 pb-8 pt-10 text-[#191f28]">
@@ -287,8 +176,8 @@ export default function RestaurantRecommendations() {
             {locationInput || "선택한 위치"} 근처 {menu} 맛집
           </h1>
           <p className="mt-3 text-sm font-bold leading-relaxed text-[#6b7684]">
-            카카오맵 장소 검색으로 주변 맛집을 찾아봤어요. 연결이 막혀도 기본
-            후보를 먼저 보여드려요.
+            카카오 Local API로 실제 주변 가게를 찾아 보여드려요. 위치를 바꾸면
+            다른 후보도 바로 검색할 수 있어요.
           </p>
         </header>
 
