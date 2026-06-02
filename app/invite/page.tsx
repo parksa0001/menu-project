@@ -7,6 +7,7 @@ const KAKAO_JAVASCRIPT_KEY = "989f610781cb7f258b2028717879b287";
 const KAKAO_SDK_ID = "kakao-javascript-sdk";
 const KAKAO_SDK_URL = "https://t1.kakaocdn.net/kakao_js_sdk/2.8.1/kakao.min.js";
 const PRODUCTION_ORIGIN = "https://menu-project-three-ruddy.vercel.app";
+const KAKAO_SHARE_DEBUG_KEY = "kakao_share_debug_info";
 
 const meetingTypeLabels: Record<string, string> = {
   offline: "만나서 먹기",
@@ -57,6 +58,21 @@ type KakaoShareOptions = {
   }>;
 };
 
+type KakaoShareDebugInfo = {
+  checkedAt: string;
+  currentHref: string;
+  currentOrigin: string;
+  expectedOrigin: string;
+  participantUrl: string;
+  imageUrl: string;
+  kakaoInitializedBeforeLoad: boolean | null;
+  kakaoInitializedAfterLoad: boolean | null;
+  payload: KakaoShareOptions;
+  executionOriginReason: string;
+  suspiciousUrlReason: string;
+  errorMessage?: string;
+};
+
 declare global {
   interface Window {
     Kakao?: {
@@ -76,6 +92,58 @@ const getCurrentOrigin = () => {
 
   return window.location.origin;
 };
+
+const getProductionUrl = (path: string) => `${PRODUCTION_ORIGIN}${path}`;
+
+const getSuspiciousUrlReason = (url: string) => {
+  const parsedUrl = new URL(url);
+  const origin = parsedUrl.origin;
+
+  if (origin === PRODUCTION_ORIGIN) {
+    return "OK: production domain";
+  }
+
+  if (origin === "http://localhost:3000") {
+    return "CHECK: localhost URL is being used";
+  }
+
+  if (origin === "http://127.0.0.1:3000") {
+    return "CHECK: 127.0.0.1 URL is being used";
+  }
+
+  if (origin.endsWith(".vercel.app")) {
+    return "CHECK: Vercel preview deployment URL may be used";
+  }
+
+  return `CHECK: unexpected origin ${origin}`;
+};
+
+const getExecutionOriginReason = (origin: string) => {
+  if (origin === PRODUCTION_ORIGIN) {
+    return "OK: SDK is running on production domain";
+  }
+
+  if (origin === "http://localhost:3000") {
+    return "CHECK: SDK is running on localhost";
+  }
+
+  if (origin === "http://127.0.0.1:3000") {
+    return "CHECK: SDK is running on 127.0.0.1";
+  }
+
+  if (origin.endsWith(".vercel.app")) {
+    return "CHECK: SDK is running on a Vercel preview domain";
+  }
+
+  return `CHECK: SDK is running on unexpected origin ${origin}`;
+};
+
+const waitForPaint = () =>
+  new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  });
 
 const loadKakaoSdk = () =>
   new Promise<void>((resolve, reject) => {
@@ -118,6 +186,25 @@ const loadKakaoSdk = () =>
 function InviteContent() {
   const searchParams = useSearchParams();
   const [notice, setNotice] = useState("");
+  const [shareDebugInfo, setShareDebugInfo] =
+    useState<KakaoShareDebugInfo | null>(() => {
+      if (typeof window === "undefined") {
+        return null;
+      }
+
+      const savedDebugInfo = sessionStorage.getItem(KAKAO_SHARE_DEBUG_KEY);
+
+      if (!savedDebugInfo) {
+        return null;
+      }
+
+      try {
+        return JSON.parse(savedDebugInfo) as KakaoShareDebugInfo;
+      } catch {
+        sessionStorage.removeItem(KAKAO_SHARE_DEBUG_KEY);
+        return null;
+      }
+    });
   const meetingName = searchParams.get("name") || "우리 모임";
   const meetingTypeKey = searchParams.get("type") || "offline";
   const meetingTypeLabel = meetingTypeLabels[meetingTypeKey] || meetingTypeKey;
@@ -135,7 +222,7 @@ function InviteContent() {
 
     return `/join?${normalizedSearchParams.toString()}`;
   }, [participantKey, searchParams]);
-  const getParticipantUrl = () => `${getCurrentOrigin()}${joinPath}`;
+  const getParticipantUrl = () => getProductionUrl(joinPath);
 
   useEffect(() => {
     loadKakaoSdk().catch(() => {
@@ -163,6 +250,64 @@ function InviteContent() {
   };
 
   const shareToKakao = async () => {
+    const participantUrl = getParticipantUrl();
+    const imageUrl = getProductionUrl("/og-image.png");
+    const kakaoInitializedBeforeLoad = window.Kakao?.isInitialized() ?? null;
+    const payload: KakaoShareOptions = {
+      objectType: "feed",
+      content: {
+        title: "우리 뭐 먹지?",
+        description: "친구들과 같이 메뉴를 골라보세요",
+        imageUrl,
+        link: {
+          mobileWebUrl: participantUrl,
+          webUrl: participantUrl,
+        },
+      },
+      buttons: [
+        {
+          title: "참여하기",
+          link: {
+            mobileWebUrl: participantUrl,
+            webUrl: participantUrl,
+          },
+        },
+      ],
+    };
+    const baseDebugInfo: KakaoShareDebugInfo = {
+      checkedAt: new Date().toISOString(),
+      currentHref: window.location.href,
+      currentOrigin: getCurrentOrigin(),
+      expectedOrigin: PRODUCTION_ORIGIN,
+      participantUrl,
+      imageUrl,
+      kakaoInitializedBeforeLoad,
+      kakaoInitializedAfterLoad: null,
+      payload,
+      executionOriginReason: getExecutionOriginReason(getCurrentOrigin()),
+      suspiciousUrlReason: getSuspiciousUrlReason(participantUrl),
+    };
+
+    console.log("[Kakao Share Debug] window.location.href", window.location.href);
+    console.log("[Kakao Share Debug] participantUrl", participantUrl);
+    console.log(
+      "[Kakao Share Debug] link.mobileWebUrl",
+      payload.content.link.mobileWebUrl,
+    );
+    console.log("[Kakao Share Debug] link.webUrl", payload.content.link.webUrl);
+    console.log(
+      "[Kakao Share Debug] Kakao.isInitialized before load",
+      kakaoInitializedBeforeLoad,
+    );
+    console.log(
+      "[Kakao Share Debug] SDK execution origin",
+      baseDebugInfo.currentOrigin,
+      baseDebugInfo.executionOriginReason,
+    );
+    console.log("[Kakao Share Debug] payload", payload);
+    sessionStorage.setItem(KAKAO_SHARE_DEBUG_KEY, JSON.stringify(baseDebugInfo));
+    setShareDebugInfo(baseDebugInfo);
+
     try {
       await loadKakaoSdk();
 
@@ -170,30 +315,36 @@ function InviteContent() {
         throw new Error("Kakao Share is not ready");
       }
 
-      const participantUrl = getParticipantUrl();
+      const kakaoInitializedAfterLoad = window.Kakao.isInitialized();
 
-      window.Kakao.Share.sendDefault({
-        objectType: "feed",
-        content: {
-          title: "우리 뭐 먹지?",
-          description: "친구들과 같이 메뉴를 골라보세요",
-          imageUrl: `${getCurrentOrigin()}/og-image.png`,
-          link: {
-            mobileWebUrl: participantUrl,
-            webUrl: participantUrl,
-          },
-        },
-        buttons: [
-          {
-            title: "참여하기",
-            link: {
-              mobileWebUrl: participantUrl,
-              webUrl: participantUrl,
-            },
-          },
-        ],
-      });
-    } catch {
+      console.log(
+        "[Kakao Share Debug] Kakao.isInitialized after load",
+        kakaoInitializedAfterLoad,
+      );
+      console.log("[Kakao Share Debug] sendDefault payload", payload);
+      const nextDebugInfo = {
+        ...baseDebugInfo,
+        kakaoInitializedAfterLoad,
+      };
+
+      sessionStorage.setItem(KAKAO_SHARE_DEBUG_KEY, JSON.stringify(nextDebugInfo));
+      setShareDebugInfo(nextDebugInfo);
+      await waitForPaint();
+
+      window.Kakao.Share.sendDefault(payload);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown Kakao Share error";
+
+      console.log("[Kakao Share Debug] share error", error);
+      const nextDebugInfo = {
+        ...baseDebugInfo,
+        kakaoInitializedAfterLoad: window.Kakao?.isInitialized() ?? null,
+        errorMessage,
+      };
+
+      sessionStorage.setItem(KAKAO_SHARE_DEBUG_KEY, JSON.stringify(nextDebugInfo));
+      setShareDebugInfo(nextDebugInfo);
       await copyInviteLink();
       showNotice("공유창을 열지 못해서 링크를 복사했어요");
     }
@@ -261,6 +412,70 @@ function InviteContent() {
         >
           {notice || "링크가 복사됐어요"}
         </p>
+
+        {shareDebugInfo && (
+          <div className="mt-4 rounded-[24px] border border-[#dbe5f0] bg-white p-4 text-left shadow-[0_4px_14px_rgba(25,31,40,0.035)]">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-sm font-black text-[#191f28]">
+                카카오 공유 진단
+              </p>
+              <span
+                className={[
+                  "rounded-full px-3 py-1 text-[11px] font-extrabold",
+                  shareDebugInfo.suspiciousUrlReason.startsWith("OK")
+                    ? "bg-[#eaf3ff] text-[#3182f6]"
+                    : "bg-[#fff4d8] text-[#b45f00]",
+                ].join(" ")}
+              >
+                {shareDebugInfo.suspiciousUrlReason}
+              </span>
+            </div>
+            <div className="space-y-2 text-xs font-bold leading-relaxed text-[#4e5968]">
+              <p>
+                실행 도메인:{" "}
+                <span className="break-all text-[#191f28]">
+                  {shareDebugInfo.currentOrigin}
+                </span>{" "}
+                <span className="text-[#3182f6]">
+                  ({shareDebugInfo.executionOriginReason})
+                </span>
+              </p>
+              <p>
+                현재 URL:{" "}
+                <span className="break-all text-[#191f28]">
+                  {shareDebugInfo.currentHref}
+                </span>
+              </p>
+              <p>
+                공유 URL:{" "}
+                <span className="break-all text-[#191f28]">
+                  {shareDebugInfo.participantUrl}
+                </span>
+              </p>
+              <p>
+                이미지 URL:{" "}
+                <span className="break-all text-[#191f28]">
+                  {shareDebugInfo.imageUrl}
+                </span>
+              </p>
+              <p>
+                SDK 초기화:{" "}
+                <span className="text-[#3182f6]">
+                  before={String(shareDebugInfo.kakaoInitializedBeforeLoad)} /
+                  after={String(shareDebugInfo.kakaoInitializedAfterLoad)}
+                </span>
+              </p>
+              {shareDebugInfo.errorMessage && (
+                <p className="rounded-[16px] bg-[#fff1f1] px-3 py-2 text-[#f04452]">
+                  오류: {shareDebugInfo.errorMessage}
+                </p>
+              )}
+            </div>
+            <pre className="mt-3 max-h-56 overflow-auto rounded-[18px] bg-[#f7f8fa] p-3 text-[11px] font-bold leading-relaxed text-[#4e5968]">
+              {JSON.stringify(shareDebugInfo.payload, null, 2)}
+            </pre>
+          </div>
+        )}
 
         <button
           type="button"

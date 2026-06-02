@@ -25,6 +25,69 @@ type FinalPlace = {
   placeUrl?: string;
 };
 
+type RecommendMode = "offline" | "delivery";
+
+const modeLabels: Record<
+  RecommendMode,
+  {
+    badge: string;
+    icon: string;
+    headingSuffix: string;
+    description: string;
+    conditionLabel: string;
+    inputPlaceholder: string;
+    listTitle: string;
+    emptyMessage: string;
+    selectButtonIdle: string;
+    selectButtonActive: string;
+    confirmTitle: string;
+    finalTitle: string;
+    finalSubtitle: string;
+    finalLabel: string;
+    mapButton: string;
+    searchButton: string;
+  }
+> = {
+  offline: {
+    badge: "카카오맵 맛집 추천",
+    icon: "📍",
+    headingSuffix: "맛집",
+    description:
+      "후보 중 마음에 드는 곳을 고르고 친구들과 최종 장소를 확정해보세요.",
+    conditionLabel: "검색 조건",
+    inputPlaceholder: "예: 강남역, 홍대입구, 성수동",
+    listTitle: "맛집 리스트",
+    emptyMessage: "검색 결과가 없어요. 기본 추천 리스트를 보여드릴게요.",
+    selectButtonIdle: "장소를 선택해주세요",
+    selectButtonActive: "최종 장소 결정",
+    confirmTitle: "이 장소로 결정할까요?",
+    finalTitle: "장소가 결정됐어요!",
+    finalSubtitle: "친구들과 오늘 갈 곳이 정해졌어요",
+    finalLabel: "오늘의 최종 장소",
+    mapButton: "카카오맵 열기",
+    searchButton: "검색",
+  },
+  delivery: {
+    badge: "배달 매장 추천",
+    icon: "🛵",
+    headingSuffix: "배달 매장",
+    description:
+      "배달받을 주소 기준으로 주문하기 좋은 매장 후보를 골라보세요.",
+    conditionLabel: "배달 조건",
+    inputPlaceholder: "예: 강남역 11번 출구, 성수동 카페거리",
+    listTitle: "배달 가능 매장 후보",
+    emptyMessage: "검색 결과가 없어요. 기본 배달 후보를 보여드릴게요.",
+    selectButtonIdle: "매장을 선택해주세요",
+    selectButtonActive: "최종 주문 매장 결정",
+    confirmTitle: "이 매장으로 주문할까요?",
+    finalTitle: "주문 매장이 결정됐어요!",
+    finalSubtitle: "친구들과 주문할 매장이 정해졌어요",
+    finalLabel: "오늘의 최종 주문 매장",
+    mapButton: "매장 정보 보기",
+    searchButton: "검색",
+  },
+};
+
 const fallbackTypes = [
   {
     id: "nearby",
@@ -63,11 +126,59 @@ const fallbackTypes = [
   },
 ];
 
-const getFinalPlaceKey = (projectId: string) => `project_final_place_${projectId}`;
+const deliveryFallbackTypes = [
+  {
+    id: "nearby-delivery",
+    title: "가까운 배달 매장",
+    category: "빠른 배달 후보",
+    keyword: "배달 가까운",
+    description: "주소 기준으로 빠르게 주문하기 좋은 후보예요.",
+  },
+  {
+    id: "popular-delivery",
+    title: "인기 배달 매장",
+    category: "인기 주문 후보",
+    keyword: "배달 인기",
+    description: "친구들이 같이 고르기 무난한 인기 후보예요.",
+  },
+  {
+    id: "review-delivery",
+    title: "리뷰 좋은 배달 매장",
+    category: "리뷰 확인 후보",
+    keyword: "배달 리뷰 좋은",
+    description: "리뷰를 확인하고 주문하기 좋은 후보예요.",
+  },
+  {
+    id: "group-delivery",
+    title: "단체 주문 매장",
+    category: "여럿이 먹기 좋은 후보",
+    keyword: "배달 단체",
+    description: "여러 명이 같이 나눠 먹기 좋은 후보예요.",
+  },
+  {
+    id: "value-delivery",
+    title: "가성비 배달 매장",
+    category: "부담 적은 후보",
+    keyword: "배달 가성비",
+    description: "부담 없이 주문하기 좋은 캐주얼한 후보예요.",
+  },
+];
 
-const buildFallbackPlaces = (location: string, menu: string): KakaoPlace[] =>
-  fallbackTypes.map((type) => {
-    const query = `${location} ${type.keyword} ${menu} 맛집`.trim();
+const getFinalPlaceKey = (projectId: string, mode: RecommendMode) =>
+  `project_final_${mode}_${projectId}`;
+
+const buildFallbackPlaces = (
+  location: string,
+  menu: string,
+  mode: RecommendMode,
+): KakaoPlace[] => {
+  const types = mode === "delivery" ? deliveryFallbackTypes : fallbackTypes;
+
+  return types.map((type) => {
+    const query =
+      mode === "delivery"
+        ? `${location} ${menu} ${type.keyword}`.trim()
+        : `${location} ${type.keyword} ${menu} 맛집`.trim();
 
     return {
       id: `fallback-${type.id}`,
@@ -81,6 +192,7 @@ const buildFallbackPlaces = (location: string, menu: string): KakaoPlace[] =>
       y: "",
     };
   });
+};
 
 const formatDistance = (distance?: string) => {
   const meters = Number(distance);
@@ -103,6 +215,9 @@ const toFinalPlace = (place: KakaoPlace): FinalPlace => ({
 export default function RestaurantRecommendations() {
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId") || "default";
+  const mode: RecommendMode =
+    searchParams.get("type") === "delivery" ? "delivery" : "offline";
+  const modeCopy = modeLabels[mode];
   const menu = searchParams.get("menu") || "메뉴";
   const initialLocation = searchParams.get("location") || "";
   const lat = searchParams.get("lat") || "";
@@ -121,20 +236,29 @@ export default function RestaurantRecommendations() {
   const searchLocation = isCurrentLocationLabel ? "" : locationInput.trim();
   const keyword = useMemo(
     () =>
+      mode === "delivery"
+        ? `${searchLocation || "현재 위치"} ${menu} 배달`.trim()
+        : searchLocation
+          ? `${searchLocation} ${menu}`.trim()
+          : `${menu} 음식점`.trim(),
+    [searchLocation, menu, mode],
+  );
+  const searchKeyword = useMemo(
+    () =>
       searchLocation
         ? `${searchLocation} ${menu}`.trim()
         : `${menu} 음식점`.trim(),
     [searchLocation, menu],
   );
   const fallbackPlaces = useMemo(
-    () => buildFallbackPlaces(searchLocation || "현재 위치", menu),
-    [searchLocation, menu],
+    () => buildFallbackPlaces(searchLocation || "현재 위치", menu, mode),
+    [searchLocation, menu, mode],
   );
   const visiblePlaces = places.length > 0 ? places : fallbackPlaces;
   const selectedPlace = visiblePlaces.find((place) => place.id === selectedPlaceId);
 
   const searchRestaurants = async () => {
-    if (!keyword || finalPlace) {
+    if (!searchKeyword || finalPlace) {
       return;
     }
 
@@ -142,7 +266,7 @@ export default function RestaurantRecommendations() {
     setMessage("");
     setSelectedPlaceId("");
 
-    const params = new URLSearchParams({ query: keyword, size: "10" });
+    const params = new URLSearchParams({ query: searchKeyword, size: "10" });
 
     if (hasCoordinates) {
       params.set("lat", lat);
@@ -162,15 +286,13 @@ export default function RestaurantRecommendations() {
         : [];
 
       setPlaces(documents);
-      setMessage(
-        documents.length > 0
-          ? ""
-          : "검색 결과가 없어요. 기본 추천 리스트를 보여드릴게요.",
-      );
+      setMessage(documents.length > 0 ? "" : modeCopy.emptyMessage);
     } catch {
       setPlaces([]);
       setMessage(
-        "카카오 REST API 연결이 아직 준비되지 않아 기본 추천 리스트를 보여드려요. KAKAO_REST_API_KEY를 설정하면 실제 가게명이 바로 표시돼요.",
+        mode === "delivery"
+          ? "배달 플랫폼 연동 전이라 카카오 장소 검색 기준의 매장 후보를 보여드려요. KAKAO_REST_API_KEY를 설정하면 실제 매장명이 표시돼요."
+          : "카카오 REST API 연결이 아직 준비되지 않아 기본 추천 리스트를 보여드려요. KAKAO_REST_API_KEY를 설정하면 실제 가게명이 바로 표시돼요.",
       );
     } finally {
       setIsSearching(false);
@@ -210,14 +332,17 @@ export default function RestaurantRecommendations() {
       );
     }
 
-    localStorage.setItem(getFinalPlaceKey(projectId), JSON.stringify(nextFinalPlace));
+    localStorage.setItem(
+      getFinalPlaceKey(projectId, mode),
+      JSON.stringify(nextFinalPlace),
+    );
     setFinalPlace(nextFinalPlace);
     setIsConfirmOpen(false);
     setIsSavingFinalPlace(false);
   };
 
   useEffect(() => {
-    const localFinalPlace = localStorage.getItem(getFinalPlaceKey(projectId));
+    const localFinalPlace = localStorage.getItem(getFinalPlaceKey(projectId, mode));
 
     if (localFinalPlace) {
       try {
@@ -228,7 +353,7 @@ export default function RestaurantRecommendations() {
 
         return () => window.clearTimeout(timeoutId);
       } catch {
-        localStorage.removeItem(getFinalPlaceKey(projectId));
+        localStorage.removeItem(getFinalPlaceKey(projectId, mode));
       }
     }
 
@@ -266,7 +391,7 @@ export default function RestaurantRecommendations() {
     return () => {
       isMounted = false;
     };
-  }, [projectId]);
+  }, [projectId, mode]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(searchRestaurants, 0);
@@ -283,18 +408,20 @@ export default function RestaurantRecommendations() {
             🎉
           </div>
           <h1 className="text-[30px] font-black leading-tight">
-            장소가 결정됐어요!
+            {modeCopy.finalTitle}
           </h1>
           <p className="mt-3 text-sm font-bold text-[#6b7684]">
-            친구들과 오늘 갈 곳이 정해졌어요
+            {modeCopy.finalSubtitle}
           </p>
 
           <div className="mt-6 rounded-[34px] border border-[#edf1f5] bg-white p-5 text-left shadow-[0_4px_14px_rgba(25,31,40,0.035)]">
             <div className="rounded-[28px] bg-[#f7fbff] px-4 py-5">
               <p className="text-xs font-extrabold text-[#3182f6]">
-                오늘의 최종 장소
+                {modeCopy.finalLabel}
               </p>
-              <p className="mt-2 text-2xl font-black">🍕 {finalPlace.name}</p>
+              <p className="mt-2 text-2xl font-black">
+                {mode === "delivery" ? "🛵" : "🍽️"} {finalPlace.name}
+              </p>
               <p className="mt-3 text-sm font-bold leading-relaxed text-[#6b7684]">
                 📍 {finalPlace.address}
               </p>
@@ -317,7 +444,7 @@ export default function RestaurantRecommendations() {
                 rel="noreferrer"
                 className="mt-4 flex h-[52px] w-full items-center justify-center rounded-[26px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.01] active:scale-[0.99]"
               >
-                카카오맵 열기
+                {modeCopy.mapButton}
               </a>
             ) : null}
           </div>
@@ -331,26 +458,34 @@ export default function RestaurantRecommendations() {
       <section className="mx-auto flex w-full max-w-md flex-col">
         <header className="mb-6">
           <div className="mb-5 flex h-20 w-20 items-center justify-center rounded-[32px] bg-[#eaf3ff] text-4xl shadow-[0_8px_20px_rgba(49,130,246,0.07)]">
-            🧭
+            {modeCopy.icon}
           </div>
           <p className="text-sm font-extrabold text-[#3182f6]">
-            카카오맵 맛집 추천
+            {modeCopy.badge}
           </p>
           <h1 className="mt-2 text-[28px] font-black leading-tight">
-            {locationInput || "선택한 위치"} 근처 {menu} 맛집
+            {locationInput || "선택한 위치"} {menu} {modeCopy.headingSuffix}
           </h1>
           <p className="mt-3 text-sm font-bold leading-relaxed text-[#6b7684]">
-            후보 중 마음에 드는 곳을 고르고 친구들과 최종 장소를 확정해보세요.
+            {modeCopy.description}
           </p>
         </header>
 
         <div className="rounded-[34px] border border-[#edf1f5] bg-white p-5 shadow-[0_4px_14px_rgba(25,31,40,0.035)]">
           <div className="rounded-[28px] bg-[#f7fbff] px-4 py-4">
-            <p className="text-xs font-extrabold text-[#8b95a1]">검색 조건</p>
+            <p className="text-xs font-extrabold text-[#8b95a1]">
+              {modeCopy.conditionLabel}
+            </p>
             <p className="mt-1 text-lg font-black">{keyword || `${menu} 맛집`}</p>
-            {hasCoordinates ? (
+            {hasCoordinates && mode === "offline" ? (
               <p className="mt-1 text-xs font-bold text-[#6b7684]">
                 현재 위치 기준으로 가까운 순서도 반영해요
+              </p>
+            ) : null}
+            {mode === "delivery" ? (
+              <p className="mt-1 text-xs font-bold text-[#6b7684]">
+                지금은 카카오 장소 검색 기반 후보예요. 배달 플랫폼 API를 붙이면
+                배달 가능 여부로 바꿀 수 있어요.
               </p>
             ) : null}
           </div>
@@ -364,7 +499,7 @@ export default function RestaurantRecommendations() {
                   searchRestaurants();
                 }
               }}
-              placeholder="예: 강남역, 홍대입구, 성수동"
+              placeholder={modeCopy.inputPlaceholder}
               className="h-12 min-w-0 flex-1 rounded-[24px] border border-[#e8eef6] bg-white px-4 text-sm font-bold text-[#191f28] outline-none transition-all placeholder:text-[#b0b8c1] focus:border-[#3182f6] focus:bg-[#f7fbff]"
             />
             <button
@@ -373,14 +508,14 @@ export default function RestaurantRecommendations() {
               disabled={isSearching || !locationInput.trim()}
               className="h-12 rounded-[24px] bg-[#3182f6] px-5 text-sm font-extrabold text-white transition-all hover:scale-[1.02] active:scale-[0.99] disabled:bg-[#d8dde3]"
             >
-              검색
+              {modeCopy.searchButton}
             </button>
           </div>
 
           <div className="mt-5">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-sm font-extrabold text-[#4e5968]">
-                맛집 리스트
+                {modeCopy.listTitle}
               </p>
               <span className="text-xs font-extrabold text-[#3182f6]">
                 {isSearching ? "검색 중..." : `${visiblePlaces.length}곳`}
@@ -430,7 +565,10 @@ export default function RestaurantRecommendations() {
                             ) : null}
                           </div>
                           <p className="mt-1 line-clamp-1 text-xs font-extrabold text-[#3182f6]">
-                            {place.category_name || `${menu} 맛집`}
+                            {place.category_name ||
+                              (mode === "delivery"
+                                ? `${menu} 배달 매장`
+                                : `${menu} 맛집`)}
                           </p>
                           {address ? (
                             <p className="mt-2 text-sm font-bold leading-relaxed text-[#6b7684]">
@@ -476,7 +614,7 @@ export default function RestaurantRecommendations() {
             disabled={!selectedPlace}
             className="h-[54px] w-full rounded-[27px] bg-[#3182f6] text-base font-extrabold text-white shadow-[0_8px_18px_rgba(49,130,246,0.16)] transition-all hover:scale-[1.01] active:scale-[0.99] disabled:bg-[#d8dde3] disabled:shadow-none"
           >
-            {selectedPlace ? "최종 장소 결정" : "장소를 선택해주세요"}
+            {selectedPlace ? modeCopy.selectButtonActive : modeCopy.selectButtonIdle}
           </button>
         </div>
       </div>
@@ -484,7 +622,7 @@ export default function RestaurantRecommendations() {
       {isConfirmOpen && selectedPlace ? (
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/30 px-5 pb-5 sm:items-center sm:pb-0">
           <div className="w-full max-w-md rounded-[34px] bg-white p-5 shadow-[0_20px_50px_rgba(25,31,40,0.18)]">
-            <h2 className="text-xl font-black">이 장소로 결정할까요?</h2>
+            <h2 className="text-xl font-black">{modeCopy.confirmTitle}</h2>
             <div className="mt-4 rounded-[26px] bg-[#f7f8fa] px-4 py-4">
               <p className="text-lg font-black">{selectedPlace.place_name}</p>
               <p className="mt-2 text-sm font-bold leading-relaxed text-[#6b7684]">

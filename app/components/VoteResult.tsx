@@ -170,6 +170,8 @@ export default function VoteResult() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const projectId = searchParams.get("projectId") || "default";
+  const meetingType = searchParams.get("type") === "delivery" ? "delivery" : "offline";
+  const isDelivery = meetingType === "delivery";
   const participantKey =
     searchParams.get("participants") || searchParams.get("otherParticipants") || "4";
   const participantLabel = participantLabels[participantKey] || `${participantKey}명`;
@@ -217,7 +219,9 @@ export default function VoteResult() {
       ? decision.menus
       : isRevoteFinished
         ? topMenus.map((item) => item.menu)
-        : [];
+        : isFinished && topMenus.length === 1
+          ? [topMenus[0].menu]
+          : [];
   const hasTie = !decision && isFinished && topMenus.length > 1;
   const hasRevoted =
     typeof window !== "undefined" &&
@@ -269,7 +273,11 @@ export default function VoteResult() {
 
   const goToRecommendations = () => {
     if (!canRecommend) {
-      setLocationError("메뉴와 위치를 먼저 선택해주세요.");
+      setLocationError(
+        isDelivery
+          ? "메뉴와 배달 주소를 먼저 입력해주세요."
+          : "메뉴와 위치를 먼저 선택해주세요.",
+      );
       return;
     }
 
@@ -278,6 +286,7 @@ export default function VoteResult() {
     nextParams.set("projectId", projectId);
     nextParams.set("menu", finalMenuForLocation);
     nextParams.set("location", selectedLocationLabel);
+    nextParams.set("type", meetingType);
 
     if (locationCoords) {
       nextParams.set("lat", String(locationCoords.lat));
@@ -859,14 +868,16 @@ export default function VoteResult() {
             <div className="mt-5 rounded-[30px] border border-[#e8eef6] bg-[#f7fbff] p-4">
               <div className="flex items-start gap-3">
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[20px] bg-white text-2xl shadow-[0_6px_14px_rgba(25,31,40,0.04)]">
-                  📍
+                  {isDelivery ? "🛵" : "📍"}
                 </span>
                 <div>
                   <p className="text-lg font-black text-[#191f28]">
-                    어디에서 먹을까요?
+                    {isDelivery ? "어디로 배달받을까요?" : "어디에서 먹을까요?"}
                   </p>
                   <p className="mt-1 text-sm font-bold leading-relaxed text-[#6b7684]">
-                    위치를 선택하면 주변 맛집을 추천해드려요
+                    {isDelivery
+                      ? "배달 주소를 입력하면 주문할 매장을 추천해드려요"
+                      : "위치를 선택하면 주변 맛집을 추천해드려요"}
                   </p>
                 </div>
               </div>
@@ -903,40 +914,18 @@ export default function VoteResult() {
                 </div>
               )}
 
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={selectSearchLocation}
-                  className={[
-                    "h-12 rounded-[24px] text-sm font-extrabold transition-all hover:scale-[1.02] active:scale-[0.99]",
-                    locationMode === "search"
-                      ? "border border-[#3182f6] bg-[#eaf3ff] text-[#3182f6]"
-                      : "border border-[#e8eef6] bg-white text-[#4e5968]",
-                  ].join(" ")}
-                >
-                  위치 검색
-                </button>
-                <button
-                  type="button"
-                  onClick={selectCurrentLocation}
-                  disabled={isLocating}
-                  className={[
-                    "h-12 rounded-[24px] text-sm font-extrabold transition-all hover:scale-[1.02] active:scale-[0.99] disabled:opacity-70",
-                    locationMode === "current"
-                      ? "border border-[#3182f6] bg-[#eaf3ff] text-[#3182f6]"
-                      : "border border-[#e8eef6] bg-white text-[#4e5968]",
-                  ].join(" ")}
-                >
-                  {isLocating ? "확인 중..." : "현재 위치 사용"}
-                </button>
-              </div>
-
-              {locationMode === "search" && (
-                <div className="mt-3">
+              {isDelivery ? (
+                <div className="mt-4 rounded-[26px] bg-white p-3">
+                  <p className="px-1 text-xs font-extrabold text-[#8b95a1]">
+                    배달 주소
+                  </p>
                   <input
                     value={locationQuery}
                     onChange={(event) => {
+                      setLocationMode("search");
                       setLocationQuery(event.target.value);
+                      setLocationLabel("");
+                      setLocationCoords(null);
                       setLocationError("");
                     }}
                     onKeyDown={(event) => {
@@ -944,10 +933,59 @@ export default function VoteResult() {
                         goToRecommendations();
                       }
                     }}
-                    placeholder="예: 강남역, 홍대입구, 성수동"
-                    className="h-12 w-full rounded-[24px] border border-[#e8eef6] bg-white px-4 text-sm font-bold text-[#191f28] outline-none transition-all placeholder:text-[#b0b8c1] focus:border-[#3182f6] focus:bg-[#f7fbff]"
+                    placeholder="예: 강남역 11번 출구, 성수동 카페거리"
+                    className="mt-2 h-12 w-full rounded-[24px] border border-[#e8eef6] bg-[#f7f8fa] px-4 text-sm font-bold text-[#191f28] outline-none transition-all placeholder:text-[#b0b8c1] focus:border-[#3182f6] focus:bg-white"
                   />
                 </div>
+              ) : (
+                <>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={selectSearchLocation}
+                      className={[
+                        "h-12 rounded-[24px] text-sm font-extrabold transition-all hover:scale-[1.02] active:scale-[0.99]",
+                        locationMode === "search"
+                          ? "border border-[#3182f6] bg-[#eaf3ff] text-[#3182f6]"
+                          : "border border-[#e8eef6] bg-white text-[#4e5968]",
+                      ].join(" ")}
+                    >
+                      위치 검색
+                    </button>
+                    <button
+                      type="button"
+                      onClick={selectCurrentLocation}
+                      disabled={isLocating}
+                      className={[
+                        "h-12 rounded-[24px] text-sm font-extrabold transition-all hover:scale-[1.02] active:scale-[0.99] disabled:opacity-70",
+                        locationMode === "current"
+                          ? "border border-[#3182f6] bg-[#eaf3ff] text-[#3182f6]"
+                          : "border border-[#e8eef6] bg-white text-[#4e5968]",
+                      ].join(" ")}
+                    >
+                      {isLocating ? "확인 중..." : "현재 위치 사용"}
+                    </button>
+                  </div>
+
+                  {locationMode === "search" && (
+                    <div className="mt-3">
+                      <input
+                        value={locationQuery}
+                        onChange={(event) => {
+                          setLocationQuery(event.target.value);
+                          setLocationError("");
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && canRecommend) {
+                            goToRecommendations();
+                          }
+                        }}
+                        placeholder="예: 강남역, 홍대입구, 성수동"
+                        className="h-12 w-full rounded-[24px] border border-[#e8eef6] bg-white px-4 text-sm font-bold text-[#191f28] outline-none transition-all placeholder:text-[#b0b8c1] focus:border-[#3182f6] focus:bg-[#f7fbff]"
+                      />
+                    </div>
+                  )}
+                </>
               )}
 
               {selectedLocationLabel && (
@@ -956,7 +994,9 @@ export default function VoteResult() {
                     선택된 조건
                   </p>
                   <p className="mt-1 text-sm font-black text-[#191f28]">
-                    {selectedLocationLabel} 근처 {finalMenuForLocation} 맛집 추천
+                    {isDelivery
+                      ? `${selectedLocationLabel} 배달 ${finalMenuForLocation} 매장 추천`
+                      : `${selectedLocationLabel} 근처 ${finalMenuForLocation} 맛집 추천`}
                   </p>
                 </div>
               )}
@@ -973,7 +1013,7 @@ export default function VoteResult() {
                 disabled={!canRecommend}
                 className="mt-3 h-12 w-full rounded-[24px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.01] active:scale-[0.99] disabled:bg-[#d8dde3] disabled:text-white"
               >
-                맛집 추천 보러가기
+                {isDelivery ? "배달 매장 추천 보러가기" : "맛집 추천 보러가기"}
               </button>
             </div>
           )}
