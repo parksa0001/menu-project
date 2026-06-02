@@ -76,6 +76,13 @@ type DecisionState = {
   menus: string[];
   createdAt: string;
 };
+type LocationCandidate = {
+  id: string;
+  label: string;
+  detail: string;
+  lat: string;
+  lng: string;
+};
 
 const getVotesKey = (projectId: string) => `project_votes_${projectId}`;
 const getVoteKey = (projectId: string) => `project_vote_${projectId}`;
@@ -136,6 +143,21 @@ const fetchAddressFromCoords = async (lat: number, lng: number) => {
   const address = firstDocument?.address?.address_name;
 
   return roadAddress || address || "";
+};
+
+const fetchLocationCandidates = async (query: string) => {
+  const response = await fetch(
+    `/api/kakao/locations?query=${encodeURIComponent(query)}`,
+  );
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Location lookup failed");
+  }
+
+  return Array.isArray(payload.documents)
+    ? (payload.documents as LocationCandidate[])
+    : [];
 };
 
 const readLocalVotes = (projectId: string): StoredVote[] => {
@@ -223,8 +245,12 @@ export default function VoteResult() {
     lat: number;
     lng: number;
   } | null>(null);
+  const [locationCandidates, setLocationCandidates] = useState<
+    LocationCandidate[]
+  >([]);
   const [locationError, setLocationError] = useState("");
   const [isLocating, setIsLocating] = useState(false);
+  const [isSearchingLocations, setIsSearchingLocations] = useState(false);
   const resultVotes = decision?.type === "revote" ? revoteVotes : votes;
   const popularMenus = buildPopularMenus(resultVotes);
   const topMenus = popularMenus.filter((item) => item.rank === 1);
@@ -248,13 +274,18 @@ export default function VoteResult() {
     Boolean(localStorage.getItem(getRevoteKey(projectId)));
   const finalMenuForLocation = selectedFinalMenu || finalMenus[0] || "";
   const selectedLocationLabel =
-    locationMode === "search" ? locationQuery.trim() : locationLabel.trim();
+    locationMode === "search"
+      ? isDelivery
+        ? locationQuery.trim()
+        : locationLabel.trim()
+      : locationLabel.trim();
   const canRecommend = Boolean(finalMenuForLocation && selectedLocationLabel);
 
   const selectSearchLocation = () => {
     setLocationMode("search");
     setLocationLabel("");
     setLocationCoords(null);
+    setLocationCandidates([]);
     setLocationError("");
   };
 
@@ -263,6 +294,7 @@ export default function VoteResult() {
     setLocationError("");
     setLocationLabel("");
     setLocationCoords(null);
+    setLocationCandidates([]);
 
     if (!navigator.geolocation) {
       setLocationError("현재 위치를 사용할 수 없는 브라우저예요.");
@@ -304,6 +336,44 @@ export default function VoteResult() {
         maximumAge: 60000,
       },
     );
+  };
+
+  const searchLocationCandidates = async () => {
+    const query = locationQuery.trim();
+
+    if (!query) {
+      setLocationError("검색할 위치를 입력해주세요.");
+      return;
+    }
+
+    setIsSearchingLocations(true);
+    setLocationError("");
+    setLocationLabel("");
+    setLocationCoords(null);
+
+    try {
+      const candidates = await fetchLocationCandidates(query);
+
+      setLocationCandidates(candidates);
+      if (candidates.length === 0) {
+        setLocationError("검색 결과가 없어요. 더 구체적인 지역명을 입력해주세요.");
+      }
+    } catch {
+      setLocationCandidates([]);
+      setLocationError("위치 후보를 불러오지 못했어요. 다시 검색해주세요.");
+    } finally {
+      setIsSearchingLocations(false);
+    }
+  };
+
+  const selectLocationCandidate = (candidate: LocationCandidate) => {
+    setLocationLabel(candidate.label);
+    setLocationQuery(candidate.label);
+    setLocationCoords({
+      lat: Number(candidate.lat),
+      lng: Number(candidate.lng),
+    });
+    setLocationError("");
   };
 
   const goToRecommendations = () => {
@@ -1008,16 +1078,61 @@ export default function VoteResult() {
                         value={locationQuery}
                         onChange={(event) => {
                           setLocationQuery(event.target.value);
+                          setLocationLabel("");
+                          setLocationCoords(null);
+                          setLocationCandidates([]);
                           setLocationError("");
                         }}
                         onKeyDown={(event) => {
-                          if (event.key === "Enter" && canRecommend) {
-                            goToRecommendations();
+                          if (event.key === "Enter") {
+                            searchLocationCandidates();
                           }
                         }}
                         placeholder="예: 강남역, 홍대입구, 성수동"
                         className="h-12 w-full rounded-[24px] border border-[#e8eef6] bg-white px-4 text-sm font-bold text-[#191f28] outline-none transition-all placeholder:text-[#b0b8c1] focus:border-[#3182f6] focus:bg-[#f7fbff]"
                       />
+                      <button
+                        type="button"
+                        onClick={searchLocationCandidates}
+                        disabled={isSearchingLocations || !locationQuery.trim()}
+                        className="mt-2 h-11 w-full rounded-[22px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.01] active:scale-[0.99] disabled:bg-[#d8dde3]"
+                      >
+                        {isSearchingLocations ? "검색 중..." : "지역 후보 찾기"}
+                      </button>
+                      {locationCandidates.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          <p className="px-1 text-xs font-extrabold text-[#8b95a1]">
+                            어느 지역인지 선택해주세요
+                          </p>
+                          {locationCandidates.map((candidate) => {
+                            const isSelected =
+                              locationLabel === candidate.label &&
+                              locationCoords?.lat === Number(candidate.lat) &&
+                              locationCoords?.lng === Number(candidate.lng);
+
+                            return (
+                              <button
+                                type="button"
+                                key={candidate.id}
+                                onClick={() => selectLocationCandidate(candidate)}
+                                className={[
+                                  "w-full rounded-[20px] border px-4 py-3 text-left transition-all hover:scale-[1.01] active:scale-[0.99]",
+                                  isSelected
+                                    ? "border-[#3182f6] bg-[#eaf3ff]"
+                                    : "border-[#e8eef6] bg-white",
+                                ].join(" ")}
+                              >
+                                <span className="block text-sm font-black text-[#191f28]">
+                                  {candidate.label}
+                                </span>
+                                <span className="mt-1 block text-xs font-bold text-[#6b7684]">
+                                  {candidate.detail}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
