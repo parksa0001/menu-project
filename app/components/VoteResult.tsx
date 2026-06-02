@@ -118,6 +118,26 @@ const createParticipantId = () => {
   return `participant_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 };
 
+const formatCoordsLabel = (lat: number, lng: number) =>
+  `위도 ${lat.toFixed(4)}, 경도 ${lng.toFixed(4)}`;
+
+const fetchAddressFromCoords = async (lat: number, lng: number) => {
+  const response = await fetch(`/api/kakao/address?lat=${lat}&lng=${lng}`);
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Address lookup failed");
+  }
+
+  const firstDocument = Array.isArray(payload.documents)
+    ? payload.documents[0]
+    : null;
+  const roadAddress = firstDocument?.road_address?.address_name;
+  const address = firstDocument?.address?.address_name;
+
+  return roadAddress || address || "";
+};
+
 const readLocalVotes = (projectId: string): StoredVote[] => {
   try {
     return JSON.parse(localStorage.getItem(getVotesKey(projectId)) || "[]");
@@ -251,13 +271,28 @@ export default function VoteResult() {
 
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocationCoords({
+      async (position) => {
+        const nextCoords = {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
-        });
-        setLocationLabel("현재 위치");
-        setIsLocating(false);
+        };
+
+        setLocationCoords(nextCoords);
+
+        try {
+          const addressLabel = await fetchAddressFromCoords(
+            nextCoords.lat,
+            nextCoords.lng,
+          );
+
+          setLocationLabel(
+            addressLabel || formatCoordsLabel(nextCoords.lat, nextCoords.lng),
+          );
+        } catch {
+          setLocationLabel(formatCoordsLabel(nextCoords.lat, nextCoords.lng));
+        } finally {
+          setIsLocating(false);
+        }
       },
       () => {
         setLocationError("현재 위치를 가져오지 못했어요. 위치 검색을 사용해보세요.");
