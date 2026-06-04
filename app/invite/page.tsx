@@ -9,7 +9,7 @@ const KAKAO_SDK_URL = "https://t1.kakaocdn.net/kakao_js_sdk/2.8.1/kakao.min.js";
 const PRODUCTION_ORIGIN = "https://menu-project-three-ruddy.vercel.app";
 const KAKAO_SHARE_DEBUG_KEY = "kakao_share_debug_info";
 const SHOW_KAKAO_SHARE_DEBUG = process.env.NODE_ENV === "development";
-const OG_IMAGE_VERSION = "20260604";
+const OG_IMAGE_VERSION = "20260604-2204";
 
 const meetingTypeLabels: Record<string, string> = {
   offline: "만나서 먹기",
@@ -253,12 +253,17 @@ function InviteContent() {
 
   const shareToKakao = async () => {
     const participantUrl = getParticipantUrl();
-    const imageUrl = getProductionUrl(`/og-image.png?v=${OG_IMAGE_VERSION}`);
+    const meetingTitle = meetingName.trim() || "우리 뭐 먹지?";
+    const imageParams = new URLSearchParams({
+      title: meetingTitle,
+      v: OG_IMAGE_VERSION,
+    });
+    const imageUrl = getProductionUrl(`/api/og?${imageParams.toString()}`);
     const kakaoInitializedBeforeLoad = window.Kakao?.isInitialized() ?? null;
     const payload: KakaoShareOptions = {
       objectType: "feed",
       content: {
-        title: "우리 뭐 먹지?",
+        title: meetingTitle,
         description: "친구들과 같이 메뉴를 골라보세요",
         imageUrl,
         link: {
