@@ -72,17 +72,17 @@ const modeLabels: Record<
     icon: "🛵",
     headingSuffix: "배달 매장",
     description:
-      "배달받을 주소 기준으로 주문하기 좋은 매장 후보를 골라보세요.",
-    conditionLabel: "배달 조건",
+      "배달받을 주소 기준으로 같이 보기 좋은 매장 후보를 골라보세요.",
+    conditionLabel: "배달 기준",
     inputPlaceholder: "예: 강남역 11번 출구, 성수동 카페거리",
-    listTitle: "배달 가능 매장 후보",
+    listTitle: "추천 매장 후보",
     emptyMessage: "검색 결과가 없어요. 기본 배달 후보를 보여드릴게요.",
     selectButtonIdle: "매장을 선택해주세요",
-    selectButtonActive: "최종 주문 매장 결정",
-    confirmTitle: "이 매장으로 주문할까요?",
-    finalTitle: "주문 매장이 결정됐어요!",
-    finalSubtitle: "친구들과 주문할 매장이 정해졌어요",
-    finalLabel: "오늘의 최종 주문 매장",
+    selectButtonActive: "최종 매장 결정",
+    confirmTitle: "이 매장으로 정할까요?",
+    finalTitle: "매장이 결정됐어요!",
+    finalSubtitle: "친구들과 같이 볼 매장이 정해졌어요",
+    finalLabel: "오늘의 최종 매장",
     mapButton: "매장 정보 보기",
     searchButton: "검색",
   },
@@ -137,7 +137,7 @@ const deliveryFallbackTypes = [
   {
     id: "popular-delivery",
     title: "인기 배달 매장",
-    category: "인기 주문 후보",
+    category: "인기 후보",
     keyword: "배달 인기",
     description: "친구들이 같이 고르기 무난한 인기 후보예요.",
   },
@@ -146,7 +146,7 @@ const deliveryFallbackTypes = [
     title: "리뷰 좋은 배달 매장",
     category: "리뷰 확인 후보",
     keyword: "배달 리뷰 좋은",
-    description: "리뷰를 확인하고 주문하기 좋은 후보예요.",
+    description: "리뷰를 확인하고 고르기 좋은 후보예요.",
   },
   {
     id: "group-delivery",
@@ -160,7 +160,7 @@ const deliveryFallbackTypes = [
     title: "가성비 배달 매장",
     category: "부담 적은 후보",
     keyword: "배달 가성비",
-    description: "부담 없이 주문하기 좋은 캐주얼한 후보예요.",
+    description: "부담 없이 고르기 좋은 캐주얼한 후보예요.",
   },
 ];
 
@@ -230,6 +230,7 @@ export default function RestaurantRecommendations() {
   const [isSearching, setIsSearching] = useState(false);
   const [isSavingFinalPlace, setIsSavingFinalPlace] = useState(false);
   const [message, setMessage] = useState("");
+  const [shareMessage, setShareMessage] = useState("");
   const hasCoordinates = Boolean(lat && lng);
   const isCurrentLocationLabel =
     hasCoordinates && locationInput.trim().includes("현재 위치");
@@ -341,6 +342,47 @@ export default function RestaurantRecommendations() {
     setIsSavingFinalPlace(false);
   };
 
+  const shareFinalMenu = async () => {
+    if (!finalPlace) {
+      return;
+    }
+
+    const shareTitle = `오늘의 최종 메뉴는 ${menu}!`;
+    const placeLabel = mode === "delivery" ? "추천 매장" : "최종 장소";
+    const shareText = [
+      shareTitle,
+      `${placeLabel}: ${finalPlace.name}`,
+      finalPlace.address ? `위치: ${finalPlace.address}` : "",
+      finalPlace.placeUrl ? `정보: ${finalPlace.placeUrl}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const shareData = {
+      title: shareTitle,
+      text: shareText,
+      url: finalPlace.placeUrl || window.location.href,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        return;
+      }
+
+      await navigator.clipboard?.writeText(shareText);
+      setShareMessage("최종 메뉴가 복사됐어요");
+    } catch {
+      try {
+        await navigator.clipboard?.writeText(shareText);
+        setShareMessage("최종 메뉴가 복사됐어요");
+      } catch {
+        setShareMessage("공유를 열지 못했어요");
+      }
+    } finally {
+      window.setTimeout(() => setShareMessage(""), 1800);
+    }
+  };
+
   useEffect(() => {
     const localFinalPlace = localStorage.getItem(getFinalPlaceKey(projectId, mode));
 
@@ -447,6 +489,23 @@ export default function RestaurantRecommendations() {
                 {modeCopy.mapButton}
               </a>
             ) : null}
+            <button
+              type="button"
+              onClick={shareFinalMenu}
+              className="mt-3 flex h-[52px] w-full items-center justify-center rounded-[26px] border border-[#dbe5f0] bg-white text-sm font-extrabold text-[#3182f6] transition-all hover:scale-[1.01] active:scale-[0.99]"
+            >
+              최종 메뉴 공유하기
+            </button>
+            <p
+              className={[
+                "mt-3 text-center text-xs font-extrabold text-[#3182f6] transition-all duration-200",
+                shareMessage
+                  ? "translate-y-0 opacity-100"
+                  : "-translate-y-1 opacity-0",
+              ].join(" ")}
+            >
+              {shareMessage || "최종 메뉴가 복사됐어요"}
+            </p>
           </div>
         </section>
       </main>
