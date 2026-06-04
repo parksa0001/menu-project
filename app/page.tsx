@@ -20,7 +20,7 @@ const otherParticipantOptions = Array.from({ length: 12 }, (_, index) => {
 
   return { value, label: `${value}명` };
 });
-const appVersion = "v20260604-2216";
+const appVersion = "v20260604-2223";
 
 export default function Home() {
   const [meetingName, setMeetingName] = useState("");

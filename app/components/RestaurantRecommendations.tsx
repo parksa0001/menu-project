@@ -26,6 +26,43 @@ type FinalPlace = {
 };
 
 type RecommendMode = "offline" | "delivery";
+type KakaoShareOptions = {
+  objectType: "feed";
+  content: {
+    title: string;
+    description: string;
+    imageUrl: string;
+    link: {
+      mobileWebUrl: string;
+      webUrl: string;
+    };
+  };
+  buttons: Array<{
+    title: string;
+    link: {
+      mobileWebUrl: string;
+      webUrl: string;
+    };
+  }>;
+};
+
+declare global {
+  interface Window {
+    Kakao?: {
+      init: (key: string) => void;
+      isInitialized: () => boolean;
+      Share?: {
+        sendDefault: (options: KakaoShareOptions) => void;
+      };
+    };
+  }
+}
+
+const KAKAO_JAVASCRIPT_KEY = "989f610781cb7f258b2028717879b287";
+const KAKAO_SDK_ID = "kakao-javascript-sdk";
+const KAKAO_SDK_URL = "https://t1.kakaocdn.net/kakao_js_sdk/2.8.1/kakao.min.js";
+const PRODUCTION_ORIGIN = "https://menu-project-three-ruddy.vercel.app";
+const OG_IMAGE_VERSION = "20260604-2223";
 
 const modeLabels: Record<
   RecommendMode,
@@ -167,6 +204,61 @@ const deliveryFallbackTypes = [
 const getFinalPlaceKey = (projectId: string, mode: RecommendMode) =>
   `project_final_${mode}_${projectId}`;
 
+const getProductionUrl = (path: string) => `${PRODUCTION_ORIGIN}${path}`;
+
+const getFinalPlaceFromParams = (searchParams: Pick<URLSearchParams, "get">) => {
+  const finalPlaceName = searchParams.get("finalPlaceName");
+
+  if (!finalPlaceName) {
+    return null;
+  }
+
+  return {
+    name: finalPlaceName,
+    address: searchParams.get("finalPlaceAddress") || "",
+    phone: searchParams.get("finalPlacePhone") || "",
+    placeUrl: searchParams.get("finalPlaceUrl") || "",
+  } satisfies FinalPlace;
+};
+
+const loadKakaoSdk = () =>
+  new Promise<void>((resolve, reject) => {
+    if (window.Kakao) {
+      if (!window.Kakao.isInitialized()) {
+        window.Kakao.init(KAKAO_JAVASCRIPT_KEY);
+      }
+
+      resolve();
+      return;
+    }
+
+    const existingScript = document.getElementById(KAKAO_SDK_ID);
+
+    if (existingScript) {
+      existingScript.remove();
+    }
+
+    const script = document.createElement("script");
+
+    script.id = KAKAO_SDK_ID;
+    script.src = KAKAO_SDK_URL;
+    script.async = true;
+    script.onload = () => {
+      if (!window.Kakao) {
+        reject(new Error("Kakao SDK is not available"));
+        return;
+      }
+
+      if (!window.Kakao.isInitialized()) {
+        window.Kakao.init(KAKAO_JAVASCRIPT_KEY);
+      }
+
+      resolve();
+    };
+    script.onerror = () => reject(new Error("Kakao SDK load failed"));
+    document.head.appendChild(script);
+  });
+
 const buildFallbackPlaces = (
   location: string,
   menu: string,
@@ -222,10 +314,16 @@ export default function RestaurantRecommendations() {
   const initialLocation = searchParams.get("location") || "";
   const lat = searchParams.get("lat") || "";
   const lng = searchParams.get("lng") || "";
+  const finalPlaceFromParams = useMemo(
+    () => getFinalPlaceFromParams(searchParams),
+    [searchParams],
+  );
   const [locationInput, setLocationInput] = useState(initialLocation);
   const [places, setPlaces] = useState<KakaoPlace[]>([]);
   const [selectedPlaceId, setSelectedPlaceId] = useState("");
-  const [finalPlace, setFinalPlace] = useState<FinalPlace | null>(null);
+  const [finalPlace, setFinalPlace] = useState<FinalPlace | null>(
+    finalPlaceFromParams,
+  );
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [isSavingFinalPlace, setIsSavingFinalPlace] = useState(false);
@@ -257,6 +355,44 @@ export default function RestaurantRecommendations() {
   );
   const visiblePlaces = places.length > 0 ? places : fallbackPlaces;
   const selectedPlace = visiblePlaces.find((place) => place.id === selectedPlaceId);
+  const buildFinalShareUrl = (place: FinalPlace) => {
+    const nextParams = new URLSearchParams(searchParams.toString());
+
+    nextParams.set("projectId", projectId);
+    nextParams.set("type", mode);
+    nextParams.set("menu", menu);
+    nextParams.set("location", locationInput);
+    nextParams.set("finalPlaceName", place.name);
+    nextParams.set("finalPlaceAddress", place.address);
+    nextParams.set("finalPlacePhone", place.phone);
+
+    if (place.placeUrl) {
+      nextParams.set("finalPlaceUrl", place.placeUrl);
+    } else {
+      nextParams.delete("finalPlaceUrl");
+    }
+
+    return getProductionUrl(`/recommend?${nextParams.toString()}`);
+  };
+  const buildFinalSharePayload = (place: FinalPlace) => {
+    const shareTitle = `오늘의 최종 메뉴는 ${menu}!`;
+    const placeLabel = mode === "delivery" ? "추천 매장" : "최종 장소";
+    const shareText = [
+      shareTitle,
+      `${placeLabel}: ${place.name}`,
+      place.address ? `위치: ${place.address}` : "",
+      place.placeUrl ? `정보: ${place.placeUrl}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return {
+      placeLabel,
+      shareTitle,
+      shareText,
+      shareUrl: buildFinalShareUrl(place),
+    };
+  };
 
   const searchRestaurants = async () => {
     if (!searchKeyword || finalPlace) {
@@ -347,20 +483,11 @@ export default function RestaurantRecommendations() {
       return;
     }
 
-    const shareTitle = `오늘의 최종 메뉴는 ${menu}!`;
-    const placeLabel = mode === "delivery" ? "추천 매장" : "최종 장소";
-    const shareText = [
-      shareTitle,
-      `${placeLabel}: ${finalPlace.name}`,
-      finalPlace.address ? `위치: ${finalPlace.address}` : "",
-      finalPlace.placeUrl ? `정보: ${finalPlace.placeUrl}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+    const { shareTitle, shareText, shareUrl } = buildFinalSharePayload(finalPlace);
     const shareData = {
       title: shareTitle,
       text: shareText,
-      url: finalPlace.placeUrl || window.location.href,
+      url: shareUrl,
     };
 
     try {
@@ -383,7 +510,59 @@ export default function RestaurantRecommendations() {
     }
   };
 
+  const shareFinalMenuToKakao = async () => {
+    if (!finalPlace) {
+      return;
+    }
+
+    const { placeLabel, shareTitle, shareUrl } =
+      buildFinalSharePayload(finalPlace);
+    const imageParams = new URLSearchParams({
+      title: `${menu} 결정!`,
+      v: OG_IMAGE_VERSION,
+    });
+    const imageUrl = getProductionUrl(`/api/og?${imageParams.toString()}`);
+    const payload: KakaoShareOptions = {
+      objectType: "feed",
+      content: {
+        title: shareTitle,
+        description: `${placeLabel}: ${finalPlace.name}`,
+        imageUrl,
+        link: {
+          mobileWebUrl: shareUrl,
+          webUrl: shareUrl,
+        },
+      },
+      buttons: [
+        {
+          title: finalPlace.placeUrl ? "매장 정보 보기" : "결과 보기",
+          link: {
+            mobileWebUrl: shareUrl,
+            webUrl: shareUrl,
+          },
+        },
+      ],
+    };
+
+    try {
+      await loadKakaoSdk();
+
+      if (!window.Kakao || !window.Kakao.isInitialized() || !window.Kakao.Share) {
+        throw new Error("Kakao Share is not ready");
+      }
+
+      window.Kakao.Share.sendDefault(payload);
+    } catch {
+      await shareFinalMenu();
+      setShareMessage("카카오톡 공유를 열지 못해서 내용을 복사했어요");
+    }
+  };
+
   useEffect(() => {
+    if (finalPlaceFromParams) {
+      return;
+    }
+
     const localFinalPlace = localStorage.getItem(getFinalPlaceKey(projectId, mode));
 
     if (localFinalPlace) {
@@ -433,7 +612,7 @@ export default function RestaurantRecommendations() {
     return () => {
       isMounted = false;
     };
-  }, [projectId, mode]);
+  }, [projectId, mode, finalPlaceFromParams]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(searchRestaurants, 0);
@@ -441,6 +620,16 @@ export default function RestaurantRecommendations() {
     return () => window.clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!finalPlace) {
+      return;
+    }
+
+    loadKakaoSdk().catch(() => {
+      // Native share and copy remain available when Kakao SDK is unavailable.
+    });
+  }, [finalPlace]);
 
   if (finalPlace) {
     return (
@@ -489,6 +678,13 @@ export default function RestaurantRecommendations() {
                 {modeCopy.mapButton}
               </a>
             ) : null}
+            <button
+              type="button"
+              onClick={shareFinalMenuToKakao}
+              className="mt-3 flex h-[52px] w-full items-center justify-center rounded-[26px] bg-[#fee500] text-sm font-extrabold text-[#191f28] transition-all hover:scale-[1.01] active:scale-[0.99]"
+            >
+              카카오톡 공유하기
+            </button>
             <button
               type="button"
               onClick={shareFinalMenu}
