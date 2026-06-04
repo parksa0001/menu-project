@@ -8,6 +8,7 @@ const KAKAO_SDK_ID = "kakao-javascript-sdk";
 const KAKAO_SDK_URL = "https://t1.kakaocdn.net/kakao_js_sdk/2.8.1/kakao.min.js";
 const PRODUCTION_ORIGIN = "https://menu-project-three-ruddy.vercel.app";
 const KAKAO_SHARE_DEBUG_KEY = "kakao_share_debug_info";
+const SHOW_KAKAO_SHARE_DEBUG = process.env.NODE_ENV === "development";
 
 const meetingTypeLabels: Record<string, string> = {
   offline: "만나서 먹기",
@@ -188,7 +189,7 @@ function InviteContent() {
   const [notice, setNotice] = useState("");
   const [shareDebugInfo, setShareDebugInfo] =
     useState<KakaoShareDebugInfo | null>(() => {
-      if (typeof window === "undefined") {
+      if (!SHOW_KAKAO_SHARE_DEBUG || typeof window === "undefined") {
         return null;
       }
 
@@ -288,25 +289,27 @@ function InviteContent() {
       suspiciousUrlReason: getSuspiciousUrlReason(participantUrl),
     };
 
-    console.log("[Kakao Share Debug] window.location.href", window.location.href);
-    console.log("[Kakao Share Debug] participantUrl", participantUrl);
-    console.log(
-      "[Kakao Share Debug] link.mobileWebUrl",
-      payload.content.link.mobileWebUrl,
-    );
-    console.log("[Kakao Share Debug] link.webUrl", payload.content.link.webUrl);
-    console.log(
-      "[Kakao Share Debug] Kakao.isInitialized before load",
-      kakaoInitializedBeforeLoad,
-    );
-    console.log(
-      "[Kakao Share Debug] SDK execution origin",
-      baseDebugInfo.currentOrigin,
-      baseDebugInfo.executionOriginReason,
-    );
-    console.log("[Kakao Share Debug] payload", payload);
-    sessionStorage.setItem(KAKAO_SHARE_DEBUG_KEY, JSON.stringify(baseDebugInfo));
-    setShareDebugInfo(baseDebugInfo);
+    if (SHOW_KAKAO_SHARE_DEBUG) {
+      console.log("[Kakao Share Debug] window.location.href", window.location.href);
+      console.log("[Kakao Share Debug] participantUrl", participantUrl);
+      console.log(
+        "[Kakao Share Debug] link.mobileWebUrl",
+        payload.content.link.mobileWebUrl,
+      );
+      console.log("[Kakao Share Debug] link.webUrl", payload.content.link.webUrl);
+      console.log(
+        "[Kakao Share Debug] Kakao.isInitialized before load",
+        kakaoInitializedBeforeLoad,
+      );
+      console.log(
+        "[Kakao Share Debug] SDK execution origin",
+        baseDebugInfo.currentOrigin,
+        baseDebugInfo.executionOriginReason,
+      );
+      console.log("[Kakao Share Debug] payload", payload);
+      sessionStorage.setItem(KAKAO_SHARE_DEBUG_KEY, JSON.stringify(baseDebugInfo));
+      setShareDebugInfo(baseDebugInfo);
+    }
 
     try {
       await loadKakaoSdk();
@@ -317,18 +320,20 @@ function InviteContent() {
 
       const kakaoInitializedAfterLoad = window.Kakao.isInitialized();
 
-      console.log(
-        "[Kakao Share Debug] Kakao.isInitialized after load",
-        kakaoInitializedAfterLoad,
-      );
-      console.log("[Kakao Share Debug] sendDefault payload", payload);
       const nextDebugInfo = {
         ...baseDebugInfo,
         kakaoInitializedAfterLoad,
       };
 
-      sessionStorage.setItem(KAKAO_SHARE_DEBUG_KEY, JSON.stringify(nextDebugInfo));
-      setShareDebugInfo(nextDebugInfo);
+      if (SHOW_KAKAO_SHARE_DEBUG) {
+        console.log(
+          "[Kakao Share Debug] Kakao.isInitialized after load",
+          kakaoInitializedAfterLoad,
+        );
+        console.log("[Kakao Share Debug] sendDefault payload", payload);
+        sessionStorage.setItem(KAKAO_SHARE_DEBUG_KEY, JSON.stringify(nextDebugInfo));
+        setShareDebugInfo(nextDebugInfo);
+      }
       await waitForPaint();
 
       window.Kakao.Share.sendDefault(payload);
@@ -336,15 +341,17 @@ function InviteContent() {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown Kakao Share error";
 
-      console.log("[Kakao Share Debug] share error", error);
       const nextDebugInfo = {
         ...baseDebugInfo,
         kakaoInitializedAfterLoad: window.Kakao?.isInitialized() ?? null,
         errorMessage,
       };
 
-      sessionStorage.setItem(KAKAO_SHARE_DEBUG_KEY, JSON.stringify(nextDebugInfo));
-      setShareDebugInfo(nextDebugInfo);
+      if (SHOW_KAKAO_SHARE_DEBUG) {
+        console.log("[Kakao Share Debug] share error", error);
+        sessionStorage.setItem(KAKAO_SHARE_DEBUG_KEY, JSON.stringify(nextDebugInfo));
+        setShareDebugInfo(nextDebugInfo);
+      }
       await copyInviteLink();
       showNotice("공유창을 열지 못해서 링크를 복사했어요");
     }
@@ -413,7 +420,7 @@ function InviteContent() {
           {notice || "링크가 복사됐어요"}
         </p>
 
-        {shareDebugInfo && (
+        {SHOW_KAKAO_SHARE_DEBUG && shareDebugInfo && (
           <div className="mt-4 rounded-[24px] border border-[#dbe5f0] bg-white p-4 text-left shadow-[0_4px_14px_rgba(25,31,40,0.035)]">
             <div className="mb-3 flex items-center justify-between gap-3">
               <p className="text-sm font-black text-[#191f28]">

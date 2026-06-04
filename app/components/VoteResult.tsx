@@ -229,8 +229,8 @@ export default function VoteResult() {
   const [rouletteRotation, setRouletteRotation] = useState(0);
   const [rouletteWinner, setRouletteWinner] = useState("");
   const [showConfetti, setShowConfetti] = useState(false);
-  const [tieBreakerMode, setTieBreakerMode] = useState<"roulette" | "revote">(
-    "roulette",
+  const [tieBreakerMode, setTieBreakerMode] = useState<"select" | "revote">(
+    "select",
   );
   const [selectedRevoteMenu, setSelectedRevoteMenu] = useState("");
   const [isSavingRevote, setIsSavingRevote] = useState(false);
@@ -549,6 +549,7 @@ export default function VoteResult() {
       return;
     }
 
+    setTieBreakerMode("revote");
     setDecision({
       type: "revote",
       menus: payload.slice(1),
@@ -593,6 +594,7 @@ export default function VoteResult() {
           menus: existingDecision.menus.slice(1),
           createdAt: existingDecision.created_at,
         });
+        setTieBreakerMode("revote");
       } else {
         const { error } = await supabase.from("votes").insert({
           project_id: projectId,
@@ -611,6 +613,7 @@ export default function VoteResult() {
           menus: candidates,
           createdAt: new Date().toISOString(),
         });
+        setTieBreakerMode("revote");
       }
     }
 
@@ -850,52 +853,7 @@ export default function VoteResult() {
                       </span>
                     ))}
                   </div>
-                  {tieBreakerMode === "roulette" ? (
-                    <>
-                      <div className="relative mx-auto mt-5 flex h-64 w-64 items-center justify-center">
-                        <div className="absolute -top-1 z-10 h-0 w-0 border-x-[13px] border-t-[24px] border-x-transparent border-t-[#191f28]" />
-                        <div
-                          className="relative h-60 w-60 rounded-full border-[10px] border-white shadow-[0_14px_34px_rgba(25,31,40,0.12)]"
-                          style={{
-                            background: buildRouletteBackground(
-                              topMenus.map((item) => item.menu),
-                            ),
-                          }}
-                        >
-                          {topMenus.map((item, index) => {
-                            const segmentAngle = 360 / topMenus.length;
-                            const angle =
-                              index * segmentAngle + segmentAngle / 2 - 90;
-
-                            return (
-                              <div
-                                key={item.menu}
-                                className="absolute left-1/2 top-1/2 origin-left text-[13px] font-black text-[#191f28]"
-                                style={{
-                                  transform: `rotate(${angle}deg) translateX(46px) rotate(90deg)`,
-                                }}
-                              >
-                                <span className="rounded-full bg-white/75 px-2 py-1 shadow-sm">
-                                  {menuIcons[item.menu] || "🍽️"} {item.menu}
-                                </span>
-                              </div>
-                            );
-                          })}
-                          <button
-                            type="button"
-                            onClick={() => saveDecision("random")}
-                            disabled={Boolean(decisionAction)}
-                            className="absolute left-1/2 top-1/2 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-white text-base font-black shadow-[0_8px_18px_rgba(25,31,40,0.16)] transition-all hover:scale-105 active:scale-95 disabled:text-[#b0b8c1]"
-                          >
-                            돌리기
-                          </button>
-                        </div>
-                      </div>
-                      <p className="mt-3 text-center text-xs font-bold text-[#8b95a1]">
-                        준비되면 버튼을 눌러 룰렛을 돌려보세요
-                      </p>
-                    </>
-                  ) : (
+                  {tieBreakerMode === "revote" ? (
                     <div className="mt-5 rounded-[28px] bg-white p-4">
                       <p className="text-sm font-black text-[#191f28]">
                         1등 메뉴 다시 투표 🗳
@@ -935,35 +893,28 @@ export default function VoteResult() {
                         {isSavingRevote ? "저장 중..." : "재투표 완료"}
                       </button>
                     </div>
+                  ) : (
+                    <div className="mt-5 grid grid-cols-1 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => saveDecision("random")}
+                        disabled={Boolean(decisionAction)}
+                        className="h-12 rounded-[24px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.02] active:scale-[0.99] disabled:bg-[#d8dde3]"
+                      >
+                        🎲 랜덤 룰렛
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => saveDecision("revote")}
+                        disabled={Boolean(decisionAction)}
+                        className="h-12 rounded-[24px] border border-[#dbe5f0] bg-white text-sm font-extrabold text-[#3182f6] transition-all hover:scale-[1.02] active:scale-[0.99] disabled:text-[#b0b8c1]"
+                      >
+                        {decisionAction === "revote"
+                          ? "재투표 준비 중..."
+                          : "🗳 공동 1등 재투표"}
+                      </button>
+                    </div>
                   )}
-                  <div className="mt-4 grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setTieBreakerMode("roulette")}
-                      disabled={Boolean(decisionAction)}
-                      className={[
-                        "h-12 rounded-[24px] text-sm font-extrabold transition-all hover:scale-[1.02] active:scale-[0.99] disabled:text-[#b0b8c1]",
-                        tieBreakerMode === "roulette"
-                          ? "bg-[#3182f6] text-white"
-                          : "border border-[#dbe5f0] bg-white text-[#3182f6]",
-                      ].join(" ")}
-                    >
-                      🎲 룰렛 돌리기
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTieBreakerMode("revote")}
-                      disabled={Boolean(decisionAction)}
-                      className={[
-                        "h-12 rounded-[24px] text-sm font-extrabold transition-all hover:scale-[1.02] active:scale-[0.99] disabled:text-[#b0b8c1]",
-                        tieBreakerMode === "revote"
-                          ? "bg-[#3182f6] text-white"
-                          : "border border-[#dbe5f0] bg-white text-[#3182f6]",
-                      ].join(" ")}
-                    >
-                      🗳 1등 메뉴만 다시 투표
-                    </button>
-                  </div>
                 </>
               )}
             </div>
@@ -1020,28 +971,102 @@ export default function VoteResult() {
               )}
 
               {isDelivery ? (
-                <div className="mt-4 rounded-[26px] bg-white p-3">
-                  <p className="px-1 text-xs font-extrabold text-[#8b95a1]">
-                    배달 주소
-                  </p>
-                  <input
-                    value={locationQuery}
-                    onChange={(event) => {
-                      setLocationMode("search");
-                      setLocationQuery(event.target.value);
-                      setLocationLabel("");
-                      setLocationCoords(null);
-                      setLocationError("");
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" && canRecommend) {
-                        goToRecommendations();
-                      }
-                    }}
-                    placeholder="예: 강남역 11번 출구, 성수동 카페거리"
-                    className="mt-2 h-12 w-full rounded-[24px] border border-[#e8eef6] bg-[#f7f8fa] px-4 text-sm font-bold text-[#191f28] outline-none transition-all placeholder:text-[#b0b8c1] focus:border-[#3182f6] focus:bg-white"
-                  />
-                </div>
+                <>
+                  <div className="mt-4 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={selectCurrentLocation}
+                      disabled={isLocating}
+                      className={[
+                        "h-12 rounded-[24px] text-sm font-extrabold transition-all hover:scale-[1.02] active:scale-[0.99] disabled:opacity-70",
+                        locationMode === "current"
+                          ? "border border-[#3182f6] bg-[#eaf3ff] text-[#3182f6]"
+                          : "border border-[#e8eef6] bg-white text-[#4e5968]",
+                      ].join(" ")}
+                    >
+                      {isLocating ? "확인 중..." : "📍 현재 위치 사용"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={selectSearchLocation}
+                      className={[
+                        "h-12 rounded-[24px] text-sm font-extrabold transition-all hover:scale-[1.02] active:scale-[0.99]",
+                        locationMode === "search"
+                          ? "border border-[#3182f6] bg-[#eaf3ff] text-[#3182f6]"
+                          : "border border-[#e8eef6] bg-white text-[#4e5968]",
+                      ].join(" ")}
+                    >
+                      주소 검색
+                    </button>
+                  </div>
+
+                  {locationMode === "search" && (
+                    <div className="mt-3 rounded-[26px] bg-white p-3">
+                      <p className="px-1 text-xs font-extrabold text-[#8b95a1]">
+                        배달 주소
+                      </p>
+                      <input
+                        value={locationQuery}
+                        onChange={(event) => {
+                          setLocationQuery(event.target.value);
+                          setLocationLabel("");
+                          setLocationCoords(null);
+                          setLocationCandidates([]);
+                          setLocationError("");
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            searchLocationCandidates();
+                          }
+                        }}
+                        placeholder="예: 강남역 11번 출구, 성수동 카페거리"
+                        className="mt-2 h-12 w-full rounded-[24px] border border-[#e8eef6] bg-[#f7f8fa] px-4 text-sm font-bold text-[#191f28] outline-none transition-all placeholder:text-[#b0b8c1] focus:border-[#3182f6] focus:bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={searchLocationCandidates}
+                        disabled={isSearchingLocations || !locationQuery.trim()}
+                        className="mt-2 h-11 w-full rounded-[22px] bg-[#3182f6] text-sm font-extrabold text-white transition-all hover:scale-[1.01] active:scale-[0.99] disabled:bg-[#d8dde3]"
+                      >
+                        {isSearchingLocations ? "검색 중..." : "주소 검색"}
+                      </button>
+                      {locationCandidates.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          <p className="px-1 text-xs font-extrabold text-[#8b95a1]">
+                            배달받을 위치를 선택해주세요
+                          </p>
+                          {locationCandidates.map((candidate) => {
+                            const isSelected =
+                              locationLabel === candidate.label &&
+                              locationCoords?.lat === Number(candidate.lat) &&
+                              locationCoords?.lng === Number(candidate.lng);
+
+                            return (
+                              <button
+                                type="button"
+                                key={candidate.id}
+                                onClick={() => selectLocationCandidate(candidate)}
+                                className={[
+                                  "w-full rounded-[20px] border px-4 py-3 text-left transition-all hover:scale-[1.01] active:scale-[0.99]",
+                                  isSelected
+                                    ? "border-[#3182f6] bg-[#eaf3ff]"
+                                    : "border-[#e8eef6] bg-white",
+                                ].join(" ")}
+                              >
+                                <span className="block text-sm font-black text-[#191f28]">
+                                  {candidate.label}
+                                </span>
+                                <span className="mt-1 block text-xs font-bold text-[#6b7684]">
+                                  {candidate.detail}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
               ) : (
                 <>
                   <div className="mt-4 grid grid-cols-2 gap-2">
